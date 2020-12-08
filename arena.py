@@ -3,7 +3,7 @@ from time import time
 from entities import Factory, MovingTroop, Bomb
 from collections import defaultdict
 from exception import InvalidAction
-
+from subprocess import Popen, PIPE, STDOUT
 
 class Battle:
 
@@ -30,10 +30,10 @@ class Battle:
 
 class Scenario:
 
-    def __init__(self, factories, links, player_1, player_2):
+    def __init__(self, factories, links, bot_1, bot_2):
         self.factory_count = len(factories)
         self.link_count = len(links)
-        self.links = " ".join(links)
+        self.links = links
         self.distance_matrix = np.zeros((self.factory_count, self.factory_count), dtype=int)
         for factory_1, factory_2, distance in links:
             self.distance_matrix[factory_1, factory_2], self.distance_matrix[factory_2, factory_1] = distance, distance
@@ -41,7 +41,7 @@ class Scenario:
         self.troops = list()
         self.bombs = list()
         self.battles = [Battle(factory) for factory in self.factories]
-        self.players = [player_1, player_2]
+        self.players = {1: bot_1, -1:bot_2}
         self.bomb_counter = {1: 2, -1: 2}
         self.troop_id = 0
         self.bomb_id = 0
@@ -64,7 +64,7 @@ class Scenario:
     def check_win_condition(self):
         score = self.score
         if score[1] == 0:
-           self.winner = -1
+            self.winner = -1
         elif score[-1] == 0:
             self.winner = 1
         elif self.turn >= 200:
@@ -99,13 +99,13 @@ class Scenario:
         for bomb in self.bombs:
             bomb.move()
 
-        for player in self.players:
-            plan = player.get_plan()
+        for player, bot in self.players.items():
+            bot.communicate(self.input)
             for action_str in plan.split(";"):
                 try:
                     self.apply_action(action_str, player)
                 except InvalidAction:
-                    self.winner = -1 * player.player_id
+                    self.winner = -1 * player
                     break
 
         for factory in self.factories:
@@ -121,19 +121,11 @@ class Scenario:
 
     @property
     def input(self):
-        input_list = [str(self.factory_count), str(self.link_count)] + self.links + [str(self.entity_count)] + \
-                     [e.str for e in self.factories + self.troops + self.bombs]
+        input_str = "\n".join([str(self.factory_count), str(self.link_count)] +\
+                              [f"{s} {d} {l}" for s,d,l in self.links] + [str(self.entity_count)] + \
+                              [e.str for e in self.factories + self.troops + self.bombs])
 
-        class Input:
-            def __init__(self):
-                self.ind = 0
-
-            def __call__(self):
-                out = input_list[self.ind]
-                self.ind += 1
-                return out
-
-        return Input()
+        return input_str
 
 
 def apply_message(scenario):
@@ -179,3 +171,13 @@ def apply_inc(scenario, factory, player):
         raise InvalidAction(f"Player {player.player_id}: does not own factory {factory}")
     else:
         scenario.factories[factory].increment_prod()
+
+
+if __name__ == "__main__":
+    p0 = Popen(['python', 'main.py'], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True)
+    p1 = Popen(['python', 'main.py'], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False)
+    scenario = Scenario(factories=[(0, 1, 10, 0, 0), (1, -1, 10, 0, 0)],
+                        links=[(0, 1, 5)], bot_1=p0, bot_2=p1)
+
+    stdout_data, stderr = p0.communicate(input=scenario.input)
+    print(stdout_data)

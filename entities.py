@@ -13,7 +13,8 @@ class Factory:
 
     @property
     def str(self):
-        return " ".join([self.entity_id, self.entity_type, self.player, self.troops, self.prod, self.blocked, " "])
+        return " ".join(map(str, [self.entity_id, self.entity_type, self.player, self.troops, self.prod,
+                                  self.blocked, "0"]))
 
     def produce(self):
         if (self.player != 0) & (self.blocked == 0):
@@ -47,8 +48,8 @@ class MovingTroop:
 
     @property
     def str(self):
-        return " ".join([self.entity_id, self.entity_type, self.player, self.source, self.destination, self.troops,
-                         self.distance])
+        return " ".join(map(str, [self.entity_id, self.entity_type, self.player, self.source, self.destination,
+                                  self.troops, self.distance]))
 
     def move(self):
         if self.distance > 0:
@@ -71,7 +72,8 @@ class Bomb:
 
     @property
     def str(self):
-        return " ".join([self.entity_id, self.entity_type, self.player, self.source, self.destination, self.distance, " "])
+        return " ".join(map(str, [self.entity_id, self.entity_type, self.player, self.source, self.destination,
+                                  self.distance, "0"]))
 
     def move(self):
         if self.distance > 0:
