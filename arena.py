@@ -1,9 +1,12 @@
+import sys
 import numpy as np
 from time import time
 from entities import Factory, MovingTroop, Bomb
 from collections import defaultdict
 from exception import InvalidAction
-from subprocess import Popen, PIPE, STDOUT
+from subprocess import Popen, PIPE, STDOUT, TimeoutExpired
+from threading  import Thread
+
 
 class Battle:
 
@@ -47,6 +50,13 @@ class Scenario:
         self.bomb_id = 0
         self.winner = 0
         self.turn = 1
+
+    @property
+    def timeout(self):
+        if self.turn == 1:
+            return 100
+        else:
+            return 50
 
     @property
     def score(self):
@@ -99,14 +109,29 @@ class Scenario:
         for bomb in self.bombs:
             bomb.move()
 
+        input_str = self.input
         for player, bot in self.players.items():
-            bot.communicate(self.input)
-            for action_str in plan.split(";"):
+            try:
+                print(f"{self.turn} {player}")
+                bot.stdin.write(input_str[player]+"\n")
+                stdout_data = bot.stdout.readline().replace("\n", "")
+                bot.stdin.flush()
+                #bot.stdin.flush()
+                #bot.stdout.flush()
+            except TimeoutExpired:
+                bot.kill()
+                bot.communicate()
+                self.winner = -1 * player
+                raise TimeoutExpired
+            print(f"{player}| {stdout_data}")
+            for action_str in stdout_data.split(";"):
                 try:
                     self.apply_action(action_str, player)
                 except InvalidAction:
+                    bot.kill()
+                    bot.communicate()
                     self.winner = -1 * player
-                    break
+                    raise InvalidAction
 
         for factory in self.factories:
             factory.produce()
@@ -118,15 +143,29 @@ class Scenario:
             bomb.explode()
 
         self.check_win_condition()
+        self.turn += 1
 
     @property
     def input(self):
-        input_str = "\n".join([str(self.factory_count), str(self.link_count)] +\
-                              [f"{s} {d} {l}" for s,d,l in self.links] + [str(self.entity_count)] + \
-                              [e.str for e in self.factories + self.troops + self.bombs])
+        input_str = dict()
+        input_common = [str(self.factory_count), str(self.link_count)] +\
+                       [f"{s} {d} {l}" for s,d,l in self.links] + [str(self.entity_count)]
 
+        for player in self.players.keys():
+            input_factory = [" ".join(map(str, [e.entity_id, e.entity_type, e.player * player, e.troops, e.prod,
+                                                e.blocked, "0"])) for e in self.factories]
+            input_troops = [" ".join(map(str, [e.entity_id, e.entity_type, e.player * player, e.source, e.destination,
+                                               e.troops, e.distance])) for e in self.troops]
+            input_bombs = [" ".join(map(str, [e.entity_id, e.entity_type, e.player * player, e.source, e.destination,
+                                              e.distance, "0"])) for e in self.bombs]
+            input_str[player] = "\n".join(input_common + input_factory + input_troops + input_bombs)
         return input_str
 
+    def match(self):
+        while self.winner == 0:
+            self.play()
+
+        return self.winner
 
 def apply_message(scenario):
     pass
@@ -138,9 +177,9 @@ def apply_wait(scenario):
 
 def apply_move(scenario, source, destination, n_cyborgs, player):
     if source == destination:
-        raise InvalidAction(f"Player {player.player_id}: move actions source must be different from destination")
-    elif scenario.factories[source].player != player.player_id:
-        raise InvalidAction(f"Player {player.player_id}: does not own factory {source}")
+        raise InvalidAction(f"Player {player}: move actions source must be different from destination")
+    elif scenario.factories[source].player != player:
+        raise InvalidAction(f"Player {player}: does not own factory {source}")
     else:
         n_cyborgs = min(int(n_cyborgs), scenario.factories[int(source)].troops)
         scenario.factories[int(source)].troops -= n_cyborgs
@@ -153,11 +192,11 @@ def apply_move(scenario, source, destination, n_cyborgs, player):
 
 def apply_bomb(scenario, source, destination, player):
     if source == destination:
-        raise InvalidAction(f"Player {player.player_id}: bomb source must be different from destination")
-    elif scenario.factories[source].player != player.player_id:
-        raise InvalidAction(f"Player {player.player_id}: does not own factory {source}")
-    elif scenario.bomb_counter[player.player_id] == 0:
-        raise InvalidAction(f"Player {player.player_id}: does not have bombs")
+        raise InvalidAction(f"Player {player}: bomb source must be different from destination")
+    elif scenario.factories[source].player != player:
+        raise InvalidAction(f"Player {player}: does not own factory {source}")
+    elif scenario.bomb_counter[player] == 0:
+        raise InvalidAction(f"Player {player}: does not have bombs")
     else:
         scenario.bombs.append(Bomb(entity_id=scenario.bomb_id, source=scenario.factories[int(source)],
                                    destination=scenario.factories[int(destination)], player=player,
@@ -167,17 +206,21 @@ def apply_bomb(scenario, source, destination, player):
 
 
 def apply_inc(scenario, factory, player):
-    if scenario.factories[factory].player != player.player_id:
-        raise InvalidAction(f"Player {player.player_id}: does not own factory {factory}")
+    if scenario.factories[factory].player != player:
+        raise InvalidAction(f"Player {player}: does not own factory {factory}")
     else:
         scenario.factories[factory].increment_prod()
 
 
 if __name__ == "__main__":
-    p0 = Popen(['python', 'main.py'], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True)
-    p1 = Popen(['python', 'main.py'], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False)
-    scenario = Scenario(factories=[(0, 1, 10, 0, 0), (1, -1, 10, 0, 0)],
+
+    p0 = Popen(['python', 'main.py'], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=1)
+    p1 = Popen(['python', 'main2.py'], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=1)
+    scenario = Scenario(factories=[(0, 1, 10, 0, 0), (1, -1, 9, 0, 0)],
                         links=[(0, 1, 5)], bot_1=p0, bot_2=p1)
 
-    stdout_data, stderr = p0.communicate(input=scenario.input)
-    print(stdout_data)
+    scenario.match()
+
+    print(scenario.turn)
+    print(scenario.score)
+    print(scenario.winner)
