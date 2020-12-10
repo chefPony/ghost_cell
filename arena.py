@@ -116,6 +116,7 @@ class Scenario:
                 bot.stdin.write(input_str[player]+"\n")
                 stdout_data = bot.stdout.readline().replace("\n", "")
                 bot.stdin.flush()
+                #bot.stdout.flush()
                 #bot.stdin.flush()
                 #bot.stdout.flush()
             except TimeoutExpired:
@@ -148,16 +149,19 @@ class Scenario:
     @property
     def input(self):
         input_str = dict()
-        input_common = [str(self.factory_count), str(self.link_count)] +\
-                       [f"{s} {d} {l}" for s,d,l in self.links] + [str(self.entity_count)]
+        if self.turn == 1:
+            input_common = [str(self.factory_count), str(self.link_count)] +\
+                           [f"{s} {d} {l}" for s,d,l in self.links] + [str(self.entity_count)]
+        else:
+            input_common = [str(self.entity_count)]
 
         for player in self.players.keys():
             input_factory = [" ".join(map(str, [e.entity_id, e.entity_type, e.player * player, e.troops, e.prod,
                                                 e.blocked, "0"])) for e in self.factories]
-            input_troops = [" ".join(map(str, [e.entity_id, e.entity_type, e.player * player, e.source, e.destination,
-                                               e.troops, e.distance])) for e in self.troops]
-            input_bombs = [" ".join(map(str, [e.entity_id, e.entity_type, e.player * player, e.source, e.destination,
-                                              e.distance, "0"])) for e in self.bombs]
+            input_troops = [" ".join(map(str, [e.entity_id, e.entity_type, e.player * player, e.source.entity_id,
+                                               e.destination.entity_id, e.troops, e.distance])) for e in self.troops]
+            input_bombs = [" ".join(map(str, [e.entity_id, e.entity_type, e.player * player, e.source.entity_id,
+                                              e.destination.entity_id, e.distance, "0"])) for e in self.bombs]
             input_str[player] = "\n".join(input_common + input_factory + input_troops + input_bombs)
         return input_str
 
@@ -221,6 +225,8 @@ if __name__ == "__main__":
 
     scenario.match()
 
-    print(scenario.turn)
-    print(scenario.score)
-    print(scenario.winner)
+    p0.terminate(), p1.terminate()
+
+    print(f"Game endend at turn{scenario.turn}")
+    print(f"Final score {scenario.score}")
+    print(f"Winner is : {scenario.winner}")
