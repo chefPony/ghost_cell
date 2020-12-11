@@ -13,22 +13,28 @@ class Battle:
     def __init__(self, factory: Factory):
         self.factory = factory
         self.incoming = 0
+        self.id_incoming = list()
 
-    def add_to_battle(self, troop: MovingTroop):
+    def add_to_battle(self, troop):
         if (troop.distance == 0) and (troop.destination == self.factory):
             self.incoming += troop.troops * np.sign(troop.player)
-            del troop
+            self.id_incoming.append(troop.entity_id)
         else:
             pass
 
     def resolve(self):
         incoming_player = np.sign(self.incoming)
         if self.factory.player != incoming_player:
-            self.factory.troops -= abs(self.incoming)
-            self.factory.player = incoming_player
+            self.factory.player = incoming_player if self.factory.troops < abs(self.incoming) else self.factory.player
+            self.factory.troops = abs(self.factory.troops - abs(self.incoming))
         else:
             self.factory.troops += abs(self.incoming)
         self.incoming = 0
+
+    def clean_scenario(self, scenario):
+        for i in self.id_incoming:
+            scenario.troops.pop(i)
+        self.id_incoming = list()
 
 
 class Scenario:
@@ -41,10 +47,10 @@ class Scenario:
         for factory_1, factory_2, distance in links:
             self.distance_matrix[factory_1, factory_2], self.distance_matrix[factory_2, factory_1] = distance, distance
         self.factories = [Factory(*factory) for factory in factories]
-        self.troops = list()
-        self.bombs = list()
+        self.troops = dict()
+        self.bombs = dict()
         self.battles = [Battle(factory) for factory in self.factories]
-        self.players = {1: bot_1, -1:bot_2}
+        self.players = {1: bot_1, -1: bot_2}
         self.bomb_counter = {1: 2, -1: 2}
         self.troop_id = 0
         self.bomb_id = 0
@@ -54,16 +60,16 @@ class Scenario:
     @property
     def timeout(self):
         if self.turn == 1:
-            return 100
+            return 1
         else:
-            return 50
+            return 0.05
 
     @property
     def score(self):
         score = defaultdict(int)
         for factory in self.factories:
             score[factory.player] += factory.troops
-        for troop in self.troops:
+        for _,troop in self.troops.items():
             score[troop.player] += troop.troops
         return score
 
@@ -73,9 +79,9 @@ class Scenario:
 
     def check_win_condition(self):
         score = self.score
-        if score[1] == 0:
+        if (score[1] == 0) and (score[-1] > 0):
             self.winner = -1
-        elif score[-1] == 0:
+        elif (score[1] > 0) and (score[-1] == 0):
             self.winner = 1
         elif self.turn >= 200:
             self.winner = 1 * (score[1] > score[-1]) - 1 * (score[1] < score[-1])
@@ -101,44 +107,44 @@ class Scenario:
     def play(self):
 
         # Move troops and bombs
-        for troop in self.troops:
+        for _, troop in self.troops.items():
             troop.move()
-            if troop.distance == 0:
-                self.battles[troop.destination.entity_id].add_to_battle(troop)
 
         for bomb in self.bombs:
             bomb.move()
 
         input_str = self.input
-        for player, bot in self.players.items():
+        for player, (bot, q) in self.players.items():
+            print(f"{self.turn} {player}")
+            bot.stdin.write(input_str[player]+"\n")
+            bot.stdin.flush()
             try:
-                print(f"{self.turn} {player}")
-                bot.stdin.write(input_str[player]+"\n")
-                stdout_data = bot.stdout.readline().replace("\n", "")
-                bot.stdin.flush()
-                #bot.stdout.flush()
-                #bot.stdin.flush()
-                #bot.stdout.flush()
-            except TimeoutExpired:
+                action_plan = q.get(timeout=self.timeout).replace("\n", "")
+            except Empty:
                 bot.kill()
                 bot.communicate()
                 self.winner = -1 * player
-                raise TimeoutExpired
-            print(f"{player}| {stdout_data}")
-            for action_str in stdout_data.split(";"):
-                try:
-                    self.apply_action(action_str, player)
-                except InvalidAction:
-                    bot.kill()
-                    bot.communicate()
-                    self.winner = -1 * player
-                    raise InvalidAction
+                #raise TimeoutExpired
+            else:
+                print(f"{player}| {action_plan}")
+                for action_str in action_plan.split(";"):
+                    try:
+                        self.apply_action(action_str, player)
+                    except InvalidAction:
+                        bot.kill()
+                        bot.communicate()
+                        self.winner = -1 * player
+                        #raise InvalidAction
 
         for factory in self.factories:
             factory.produce()
 
+        for _, troop in self.troops.items():
+            self.battles[troop.destination.entity_id].add_to_battle(troop)
+
         for battle in self.battles:
             battle.resolve()
+            battle.clean_scenario(self)
 
         for bomb in self.bombs:
             bomb.explode()
@@ -159,7 +165,8 @@ class Scenario:
             input_factory = [" ".join(map(str, [e.entity_id, e.entity_type, e.player * player, e.troops, e.prod,
                                                 e.blocked, "0"])) for e in self.factories]
             input_troops = [" ".join(map(str, [e.entity_id, e.entity_type, e.player * player, e.source.entity_id,
-                                               e.destination.entity_id, e.troops, e.distance])) for e in self.troops]
+                                               e.destination.entity_id, e.troops, e.distance]))
+                            for _, e in self.troops.items()]
             input_bombs = [" ".join(map(str, [e.entity_id, e.entity_type, e.player * player, e.source.entity_id,
                                               e.destination.entity_id, e.distance, "0"])) for e in self.bombs]
             input_str[player] = "\n".join(input_common + input_factory + input_troops + input_bombs)
@@ -187,10 +194,10 @@ def apply_move(scenario, source, destination, n_cyborgs, player):
     else:
         n_cyborgs = min(int(n_cyborgs), scenario.factories[int(source)].troops)
         scenario.factories[int(source)].troops -= n_cyborgs
-        scenario.troops.append(MovingTroop(entity_id=scenario.troop_id, source=scenario.factories[int(source)],
-                                           destination=scenario.factories[int(destination)], troops=n_cyborgs,
-                                           distance=scenario.distance_matrix[int(source), int(destination)],
-                                           player=player))
+        scenario.troops[scenario.troop_id] = MovingTroop(
+            entity_id=scenario.troop_id, source=scenario.factories[int(source)],
+            destination=scenario.factories[int(destination)], troops=n_cyborgs,
+            distance=scenario.distance_matrix[int(source), int(destination)], player=player)
         scenario.troop_id += 1
 
 
@@ -215,14 +222,27 @@ def apply_inc(scenario, factory, player):
     else:
         scenario.factories[factory].increment_prod()
 
+import threading
+from queue import Queue, Empty
+
+def enqueue_output(out, queue):
+    for line in iter(out.readline, b''):
+        queue.put(line)
+    out.close()
 
 if __name__ == "__main__":
 
     p0 = Popen(['python', 'main.py'], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=1)
     p1 = Popen(['python', 'main2.py'], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=1)
-    scenario = Scenario(factories=[(0, 1, 10, 0, 0), (1, -1, 9, 0, 0)],
-                        links=[(0, 1, 5)], bot_1=p0, bot_2=p1)
 
+    p0_queue, p1_queue = Queue(), Queue()
+    thread0 = threading.Thread(target=enqueue_output, args=(p0.stdout, p0_queue))
+    thread1 = threading.Thread(target=enqueue_output, args=(p1.stdout, p1_queue))
+    thread0.daemon, thread1.daemon = True, True
+    thread0.start(), thread1.start()
+
+    scenario = Scenario(factories=[(0, 1, 30, 0, 0), (1, -1, 9, 0, 0)],
+                        links=[(0, 1, 5)], bot_1=(p0,p0_queue), bot_2=(p1,p1_queue))
     scenario.match()
 
     p0.terminate(), p1.terminate()
