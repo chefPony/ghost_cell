@@ -5,7 +5,7 @@ from entities import Factory, MovingTroop, Bomb
 from collections import defaultdict
 from exception import InvalidAction
 from subprocess import Popen, PIPE, STDOUT, TimeoutExpired
-from threading  import Thread
+from threading import Thread
 
 
 class Battle:
@@ -242,7 +242,7 @@ if __name__ == "__main__":
     thread0.start(), thread1.start()
 
     scenario = Scenario(factories=[(0, 1, 30, 0, 0), (1, -1, 9, 0, 0)],
-                        links=[(0, 1, 5)], bot_1=(p0,p0_queue), bot_2=(p1,p1_queue))
+                        links=[(0, 1, 5)], bot_1=(p0, p0_queue), bot_2=(p1, p1_queue))
     scenario.match()
 
     p0.terminate(), p1.terminate()
@@ -250,3 +250,5 @@ if __name__ == "__main__":
     print(f"Game endend at turn{scenario.turn}")
     print(f"Final score {scenario.score}")
     print(f"Winner is : {scenario.winner}")
+
+4+2
