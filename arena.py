@@ -127,7 +127,7 @@ class Scenario:
             bomb.move()
 
         input_str = self.input
-        print(f"Turn {self.turn}")
+        #print(f"Turn {self.turn}")
         player_action = dict()
         for player, (bot, q) in self.players.items():
             bot.stdin.write(input_str[player]+"\n")
@@ -135,20 +135,21 @@ class Scenario:
             try:
                 action_plan = q.get(timeout=self.timeout).replace("\n", "")
             except Empty:
-                print(f"Player {player} did not answer in time")
+                #print(f"Player {player} did not answer in time")
                 self.winner = -1 * player
                 self.win_condition = "timeout"
                 return
             else:
                 player_action[player] = action_plan
+                bot.stdout.flush()
 
         for player, action_plan in player_action.items():
-            print(f"{player}| {action_plan}")
+            #print(f"{player}| {action_plan}")
             for action_str in action_plan.split(";"):
                 try:
                     self.apply_action(action_str, player)
                 except InvalidAction:
-                    print(f"Player {player} invalid action input {action_str}")
+                    #print(f"Player {player} invalid action input {action_str}")
                     self.winner = -1 * player
                     self.win_condition = "invalid action"
                     return
