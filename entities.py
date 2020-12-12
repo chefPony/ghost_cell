@@ -28,8 +28,8 @@ class Factory(Entity):
         return self._point
 
     @point.setter
-    def point(self, x, y):
-        self._point = (x, y)
+    def point(self, coords):
+        self._point = coords
 
     @property
     def entity_type(self):

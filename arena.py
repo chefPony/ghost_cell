@@ -4,8 +4,9 @@ from time import time
 from entities import Factory, MovingTroop, Bomb
 from collections import defaultdict
 from exception import InvalidAction
-from subprocess import Popen, PIPE, STDOUT, TimeoutExpired
-from threading import Thread
+from subprocess import Popen, PIPE
+import threading
+from queue import Queue, Empty
 
 
 class Battle:
@@ -46,7 +47,7 @@ class Scenario:
         self.distance_matrix = np.zeros((self.factory_count, self.factory_count), dtype=int)
         for factory_1, factory_2, distance in links:
             self.distance_matrix[factory_1, factory_2], self.distance_matrix[factory_2, factory_1] = distance, distance
-        self.factories = [Factory(*factory) for factory in factories]
+        self.factories = factories
         self.troops = dict()
         self.bombs = dict()
         self.battles = [Battle(factory) for factory in self.factories]
@@ -228,13 +229,12 @@ def apply_inc(scenario, factory, player):
     else:
         scenario.factories[factory].increment_prod()
 
-import threading
-from queue import Queue, Empty
 
 def enqueue_output(out, queue):
     for line in iter(out.readline, b''):
         queue.put(line)
     out.close()
+
 
 if __name__ == "__main__":
 
@@ -253,7 +253,7 @@ if __name__ == "__main__":
 
     p0.terminate(), p1.terminate()
 
-    print(f"Game endend at turn{scenario.turn}")
+    print(f"Game endend at turn {scenario.turn}")
     print(f"Final score {scenario.score}")
     print(f"Winner is : {scenario.winner}")
 
