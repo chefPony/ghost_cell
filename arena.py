@@ -39,7 +39,7 @@ class Battle:
 
 class Scenario:
 
-    def __init__(self, factories, links, bot_1, bot_2):
+    def __init__(self, factories, links):
         self.factory_count = len(factories)
         self.link_count = len(links)
         self.links = links
@@ -50,12 +50,20 @@ class Scenario:
         self.troops = dict()
         self.bombs = dict()
         self.battles = [Battle(factory) for factory in self.factories]
-        self.players = {1: bot_1, -1: bot_2}
+        self.players = dict()
         self.bomb_counter = {1: 2, -1: 2}
         self.troop_id = 0
         self.bomb_id = 0
         self.winner = 0
         self.turn = 1
+
+    @property
+    def players(self):
+        return self._players
+
+    @players.setter
+    def players(self, player_dict):
+        self._players = player_dict
 
     @property
     def timeout(self):
@@ -114,27 +122,25 @@ class Scenario:
             bomb.move()
 
         input_str = self.input
+        print(f"Turn {self.turn}")
         for player, (bot, q) in self.players.items():
-            print(f"{self.turn} {player}")
             bot.stdin.write(input_str[player]+"\n")
             bot.stdin.flush()
             try:
                 action_plan = q.get(timeout=self.timeout).replace("\n", "")
             except Empty:
-                bot.kill()
-                bot.communicate()
+                print(f"Player {player} did not answer in time")
                 self.winner = -1 * player
-                #raise TimeoutExpired
+                return
             else:
                 print(f"{player}| {action_plan}")
                 for action_str in action_plan.split(";"):
                     try:
                         self.apply_action(action_str, player)
                     except InvalidAction:
-                        bot.kill()
-                        bot.communicate()
+                        print(f"Player {player} invalid action input {action_str}")
                         self.winner = -1 * player
-                        #raise InvalidAction
+                        return
 
         for factory in self.factories:
             factory.produce()
@@ -242,7 +248,8 @@ if __name__ == "__main__":
     thread0.start(), thread1.start()
 
     scenario = Scenario(factories=[(0, 1, 30, 0, 0), (1, -1, 9, 0, 0)],
-                        links=[(0, 1, 5)], bot_1=(p0, p0_queue), bot_2=(p1, p1_queue))
+                        links=[(0, 1, 5)])
+    scenario.players = {1: (p0, p0_queue), -1: (p1, p1_queue)}
     scenario.match()
 
     p0.terminate(), p1.terminate()
@@ -251,4 +258,3 @@ if __name__ == "__main__":
     print(f"Final score {scenario.score}")
     print(f"Winner is : {scenario.winner}")
 
-4+2

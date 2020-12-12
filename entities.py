@@ -6,6 +6,15 @@ class Factory:
         self.troops = troops
         self.prod = prod
         self.blocked = blocked
+        self._point = None
+
+    @property
+    def point(self):
+        return self._point
+
+    @point.setter
+    def point(self, x, y):
+        self._point = (x, y)
 
     @property
     def entity_type(self):
