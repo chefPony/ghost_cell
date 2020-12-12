@@ -247,8 +247,7 @@ if __name__ == "__main__":
     thread0.daemon, thread1.daemon = True, True
     thread0.start(), thread1.start()
 
-    scenario = Scenario(factories=[(0, 1, 30, 0, 0), (1, -1, 9, 0, 0)],
-                        links=[(0, 1, 5)])
+    scenario = Scenario(factories=[(0, 1, 30, 0), (1, -1, 9, 0)], links=[(0, 1, 5)])
     scenario.players = {1: (p0, p0_queue), -1: (p1, p1_queue)}
     scenario.match()
 

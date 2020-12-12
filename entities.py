@@ -1,11 +1,26 @@
-class Factory:
+class Entity:
 
-    def __init__(self, entity_id, player, troops, prod, blocked):
+    def __init__(self, entity_id, player):
         self.entity_id = entity_id
         self.player = player
+
+
+class MovingEntity(Entity):
+
+    def __init__(self, entity_id, player, source, destination, distance):
+        super().__init__(entity_id, player)
+        self.source = source
+        self.destination = destination
+        self.distance = distance
+
+
+class Factory(Entity):
+
+    def __init__(self, entity_id, player, troops, prod):
+        super().__init__(entity_id, player)
         self.troops = troops
         self.prod = prod
-        self.blocked = blocked
+        self.blocked = 0
         self._point = None
 
     @property
@@ -41,15 +56,11 @@ class Factory:
             self.troops -= 10
 
 
-class MovingTroop:
+class MovingTroop(MovingEntity):
 
     def __init__(self, entity_id: int, player: int, source: Factory, destination: Factory, troops: int, distance: int):
-        self.entity_id = entity_id
-        self.player = player
-        self.source = source
-        self.destination = destination
+        super().__init__(entity_id, player, source, destination, distance)
         self.troops = troops
-        self.distance = distance
 
     @property
     def entity_type(self):
@@ -66,14 +77,10 @@ class MovingTroop:
         else:
             pass
 
-class Bomb:
+class Bomb(MovingEntity):
 
     def __init__(self, entity_id: int, player: int, source: Factory, destination: Factory, distance: int):
-        self.entity_id = entity_id
-        self.player = player
-        self.source = source
-        self.destination = destination
-        self.distance = distance
+        super().__init__(entity_id, player, source, destination, distance)
 
     @property
     def entity_type(self):
