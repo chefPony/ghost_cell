@@ -7,7 +7,7 @@ from exception import InvalidAction
 from subprocess import Popen, PIPE
 import threading
 from queue import Queue, Empty
-
+from constants import TIMEOUT_MOVE
 
 class Battle:
 
@@ -56,6 +56,7 @@ class Scenario:
         self.troop_id = 0
         self.bomb_id = 0
         self.winner = 0
+        self.win_condition = None
         self.turn = 1
 
     @property
@@ -71,7 +72,7 @@ class Scenario:
         if self.turn == 1:
             return 1
         else:
-            return 0.05
+            return TIMEOUT_MOVE
 
     @property
     def score(self):
@@ -90,10 +91,13 @@ class Scenario:
         score = self.score
         if (score[1] == 0) and (score[-1] > 0):
             self.winner = -1
+            self.win_condition = "conquest"
         elif (score[1] > 0) and (score[-1] == 0):
             self.winner = 1
+            self.win_condition = "conquest"
         elif self.turn >= 200:
             self.winner = 1 * (score[1] > score[-1]) - 1 * (score[1] < score[-1])
+            self.win_condition = "score"
         else:
             pass
 
@@ -124,6 +128,7 @@ class Scenario:
 
         input_str = self.input
         print(f"Turn {self.turn}")
+        player_action = dict()
         for player, (bot, q) in self.players.items():
             bot.stdin.write(input_str[player]+"\n")
             bot.stdin.flush()
@@ -132,16 +137,21 @@ class Scenario:
             except Empty:
                 print(f"Player {player} did not answer in time")
                 self.winner = -1 * player
+                self.win_condition = "timeout"
                 return
             else:
-                print(f"{player}| {action_plan}")
-                for action_str in action_plan.split(";"):
-                    try:
-                        self.apply_action(action_str, player)
-                    except InvalidAction:
-                        print(f"Player {player} invalid action input {action_str}")
-                        self.winner = -1 * player
-                        return
+                player_action[player] = action_plan
+
+        for player, action_plan in player_action.items():
+            print(f"{player}| {action_plan}")
+            for action_str in action_plan.split(";"):
+                try:
+                    self.apply_action(action_str, player)
+                except InvalidAction:
+                    print(f"Player {player} invalid action input {action_str}")
+                    self.winner = -1 * player
+                    self.win_condition = "invalid action"
+                    return
 
         for factory in self.factories:
             factory.produce()
@@ -247,7 +257,7 @@ if __name__ == "__main__":
     thread0.daemon, thread1.daemon = True, True
     thread0.start(), thread1.start()
 
-    scenario = Scenario(factories=[(0, 1, 30, 0), (1, -1, 9, 0)], links=[(0, 1, 5)])
+    scenario = Scenario(factories=[Factory(0, 1, 30, 0), Factory(1, -1, 9, 0)], links=[(0, 1, 5)])
     scenario.players = {1: (p0, p0_queue), -1: (p1, p1_queue)}
     scenario.match()
 
