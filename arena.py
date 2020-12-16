@@ -127,32 +127,31 @@ class Scenario:
             bomb.move()
 
         input_str = self.input
-        #print(f"Turn {self.turn}")
-        player_action = dict()
+        print(f"Turn {self.turn}")
+        print(f"{len(self.troops)}")
         for player, (bot, q) in self.players.items():
             bot.stdin.write(input_str[player]+"\n")
             bot.stdin.flush()
             try:
+                start = time()
                 action_plan = q.get(timeout=self.timeout).replace("\n", "")
+                print(f"{player}| {action_plan} took {(time() - start)*1e3}ms")
+                bot.stdout.flush()
+
             except Empty:
-                #print(f"Player {player} did not answer in time")
+                print(f"Player {player} did not answer in time |{(time() - start) * 1e3}ms")
                 self.winner = -1 * player
                 self.win_condition = "timeout"
                 return
             else:
-                player_action[player] = action_plan
-                bot.stdout.flush()
-
-        for player, action_plan in player_action.items():
-            #print(f"{player}| {action_plan}")
-            for action_str in action_plan.split(";"):
-                try:
-                    self.apply_action(action_str, player)
-                except InvalidAction:
-                    #print(f"Player {player} invalid action input {action_str}")
-                    self.winner = -1 * player
-                    self.win_condition = "invalid action"
-                    return
+                for action_str in action_plan.split(";"):
+                    try:
+                        self.apply_action(action_str, player)
+                    except InvalidAction:
+                        #print(f"Player {player} invalid action input {action_str}")
+                        self.winner = -1 * player
+                        self.win_condition = "invalid action"
+                        return
 
         for factory in self.factories:
             factory.produce()
@@ -253,12 +252,14 @@ if __name__ == "__main__":
     p1 = Popen(['python', 'main2.py'], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=1)
 
     p0_queue, p1_queue = Queue(), Queue()
+    q_err = Queue()
     thread0 = threading.Thread(target=enqueue_output, args=(p0.stdout, p0_queue))
+    threaderr = threading.Thread(target=enqueue_output, args=(p0.stderr, q_err))
     thread1 = threading.Thread(target=enqueue_output, args=(p1.stdout, p1_queue))
-    thread0.daemon, thread1.daemon = True, True
-    thread0.start(), thread1.start()
+    thread0.daemon, thread1.daemon, threaderr.daemon = True, True, True
+    thread0.start(), thread1.start(), threaderr.start()
 
-    scenario = Scenario(factories=[Factory(0, 1, 30, 0), Factory(1, -1, 9, 0)], links=[(0, 1, 5)])
+    scenario = Scenario(factories=[Factory(0, 1, 30, 0), Factory(1, -1, 15, 0)], links=[(0, 1, 5)])
     scenario.players = {1: (p0, p0_queue), -1: (p1, p1_queue)}
     scenario.match()
 
@@ -267,4 +268,4 @@ if __name__ == "__main__":
     print(f"Game endend at turn {scenario.turn}")
     print(f"Final score {scenario.score}")
     print(f"Winner is : {scenario.winner}")
-
+    print(f"Win by : {scenario.win_condition}")
