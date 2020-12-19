@@ -6,17 +6,14 @@
 #include <array>
 #include <list>
 #include <map>
+#include <chrono>
+
+int FORWARD = 4;
+float PENALTY = 0.9;
+
 using namespace std;
 
-const int ID = 0; 
-const int PLAYER = 1; 
-const int TROOPS = 2;
-const int PROD = 3;
-const int FROM = 2; 
-const int TO = 3;
-const int SIZE = 4;
-const int DIST = 5;
-const int BLOCKED = 5;
+const map<int, int> PLAYER_MAP = {{1, 0}, {-1, 1}};
 
 int sign(int x){
     return (x > 0) - (x < 0);
@@ -39,22 +36,57 @@ struct Bomb{
 
 class GameState{
     public:
+        int bomb_reserve[2] = {2 , 2};
         int factoryCount, linkCount;
         vector<vector<int> > distanceMatr;
         vector<Factory > factories;
         list<Troop > troops;
         list<Bomb > bombs;
         GameState (int , int);
-        void addLink(int factory1, int factory2, int distance);
-        void addFactory(int , int , int , int , int, int);
-        void addTroop(int , int , int , int , int, int);
-        void addBomb(int , int , int , int , int, int);
-        void addEntity(int, string, int, int, int ,int, int);
-        void clearMovingEntities();
-        void moveEntities();
-        void produce();
+        void addLink(int factory1, int factory2, int distance){
+            this->distanceMatr[factory1][factory2] = distance;
+            this->distanceMatr[factory2][factory1] = distance;
+        };
+        void addFactory(int entity_id,  int player, int troops, int prod, int damage, int arg_6){
+            this->factories[entity_id] = {entity_id, player, troops, prod, damage};
+        }; 
+        void addTroop(int entity_id, int player, int source, int destination, int troops, int distance){
+            this->troops.push_back({entity_id, player, source, destination, troops, distance});
+        };
+        void addBomb(int entity_id,  int player, int source, int destination, int distance, int arg_6){
+            this->bombs.push_back({entity_id, player, source, destination, distance});
+        };
+        void addEntity(int entity_id, string entity_type, int arg_1, int arg_2, int arg_3, int arg_4, int arg_5){
+            if (entity_type == "FACTORY") 
+                this->addFactory(entity_id, arg_1, arg_2, arg_3, arg_4, arg_5);
+            if (entity_type == "TROOP") 
+                this->addTroop(entity_id, arg_1, arg_2, arg_3, arg_4, arg_5);
+            if (entity_type == "BOMB") 
+                this->addBomb(entity_id, arg_1, arg_2, arg_3, arg_4, arg_5);
+        };
+        void clearMovingEntities(){
+            this->troops.clear();
+            this->bombs.clear();
+        };
+        void  moveEntities(){
+            list<Troop > :: iterator troop;
+            list<Bomb > :: iterator bomb;
+            for(troop=this->troops.begin(); troop!=this->troops.end(); ++troop){
+                troop->distance -= 1;
+            };
+            for(bomb=this->bombs.begin(); bomb!=this->bombs.end(); ++bomb){
+                bomb->distance -= 1;
+            };
+        };
+        void produce(){
+            vector<Factory > :: iterator factory;
+            for(factory=this->factories.begin(); factory!=this->factories.end(); ++factory){
+                factory->troops += factory->prod * (factory->damage == 0) * (factory->player != 0);
+            };
+        };
         void solveBattles();
         void nextState();
+        float score(int player);
 };
 
 GameState :: GameState(int arg1, int arg2){
@@ -64,55 +96,6 @@ GameState :: GameState(int arg1, int arg2){
     this->distanceMatr.resize(factoryCount);
     for (int i = 0; i<factoryCount; i++){
         this->distanceMatr[i].resize(factoryCount, 0);
-    }
-};
-
-void GameState :: addLink(int factory1, int factory2, int distance){
-    this->distanceMatr[factory1][factory2] = distance;
-    this->distanceMatr[factory2][factory1] = distance;
-};
-
-void GameState :: addFactory(int entity_id,  int player, int troops, int prod, int damage, int arg_6){
-    this->factories[entity_id] = {entity_id, player, troops, prod, damage};
-}; 
-
-void GameState :: addTroop(int entity_id, int player, int source, int destination, int troops, int distance){
-    this->troops.push_back({entity_id, player, source, destination, troops, distance});
-};
-
-void GameState :: addBomb(int entity_id,  int player, int source, int destination, int distance, int arg_6){
-    this->bombs.push_back({entity_id, player, source, destination, distance});
-};
-
-void GameState :: addEntity(int entity_id, string entity_type, int arg_1, int arg_2, int arg_3, int arg_4, int arg_5){
-    if (entity_type == "FACTORY") 
-        this->addFactory(entity_id, arg_1, arg_2, arg_3, arg_4, arg_5);
-    if (entity_type == "TROOP") 
-        this->addTroop(entity_id, arg_1, arg_2, arg_3, arg_4, arg_5);
-    if (entity_type == "BOMB") 
-        this->addBomb(entity_id, arg_1, arg_2, arg_3, arg_4, arg_5);
-};
-
-void GameState :: clearMovingEntities(){
-    this->troops.clear();
-    this->bombs.clear();
-};
-
-void GameState :: moveEntities(){
-    list<Troop > :: iterator troop;
-    list<Bomb > :: iterator bomb;
-    for(troop=this->troops.begin(); troop!=this->troops.end(); ++troop){
-        troop->distance -= 1;
-    };
-    for(bomb=this->bombs.begin(); bomb!=this->bombs.end(); ++bomb){
-        bomb->distance -= 1;
-    };
-};
-
-void GameState :: produce(){
-    vector<Factory > :: iterator factory;
-    for(factory=this->factories.begin(); factory!=this->factories.end(); ++factory){
-        factory->troops += factory->prod * (factory->damage == 0);
     };
 };
 
@@ -155,6 +138,21 @@ void GameState :: solveBattles(){
     };
 };
 
+float GameState :: score(int player){
+    vector<Factory > :: iterator factory;
+    list<Troop > :: iterator troop;
+    float points = 0;
+    for(factory= this->factories.begin(); factory != this->factories.end(); ++factory){
+        if (factory->player == player)
+            points += factory->troops + factory->prod * 10 + 1;
+    };
+    for(troop= this->troops.begin(); troop != this->troops.end(); ++troop){
+        if (troop->player == player)
+            points += troop->troops - troop->distance;
+    };
+    return points;
+};
+
 class Action{
     protected:
         string prefix;
@@ -162,9 +160,9 @@ class Action{
         Action(string prefix){
             this->prefix = prefix;
         };
-        string toStr(){
-            return prefix;
-        };
+        virtual string toStr(){return prefix;};
+        virtual bool is_valid(const GameState &S, const int player) {return true;};
+        virtual void apply(GameState &S, const int player){};
 };
 
 class SendTroops: public Action{
@@ -178,8 +176,20 @@ class SendTroops: public Action{
             this->troops = troops;
         };
         string toStr(){
-            string moveStr = {this->prefix + " " + (char)this->source + " " + (char)this->target + " " + (char)this->troops};
+            string moveStr = {this->prefix + " " + to_string(this->source) + " " + to_string(this->target) + " " + to_string(this->troops)};
             return moveStr;
+        };
+        bool is_valid(const GameState &S, const int player) {
+            if (S.factories[this->source].player == player && this->source != this->target && this->troops > 0){
+                return true;
+            }
+            else{
+                return false;
+            };
+        };
+        void apply(GameState& S, const int player){
+            S.factories[this->source].troops -= this->troops;
+            S.addTroop(-1, player, this->source, this->target, this->troops, S.distanceMatr[this->source][this->target]);
         };
 };
 
@@ -193,17 +203,130 @@ class SendBomb: public Action{
             this->target = target;
         };
         string toStr(){
-            string bombStr = {this->prefix + " " + (char)this->source + " " + (char)this->target};
+            string bombStr = {this->prefix + " " + to_string(this->source) + " " + to_string(this->target)};
             return bombStr;
+        };
+        bool is_valid(const GameState &S, const int player){
+            if (S.factories[this->source].player == player && this->source != this->target && S.bomb_reserve[PLAYER_MAP.at(player)] > 0){
+                return true;
+            }
+            else{
+                return false;
+            }
+        };
+        void apply(GameState& S, const int player){
+            S.addBomb(-1, player, this->source, this->target, S.distanceMatr[this->source][this->target], 0);
+            S.bomb_reserve[PLAYER_MAP.at(player)] -= 1;
+        };
+};
+
+class IncProd: public Action{
+    int factory;
+    public:
+        IncProd(int factory):
+            Action("INC")
+        {
+            this->factory = factory;
+        };
+        string toStr(){
+            string incStr = {this->prefix + " " + to_string(this->factory)};
+            return incStr;
+        };
+        bool is_valid(const GameState &S, const int player){
+            if (S.factories[this->factory].player == player && S.factories[this->factory].troops >= 10 && S.factories[this->factory].prod < 3){
+                return true;
+            }
+            else{
+                return false;
+            }
+        };
+        void apply(GameState& S, const int player){
+            S.factories[this->factory].prod += 1;
+            S.factories[this->factory].troops -= 10;
+        };
+};
+
+class Player{
+    int player_id;
+    public:
+        Player(int player_id){this->player_id = player_id;};
+        list<Action* > available_actions(GameState& S){
+            list<Action* > action_superset;
+            vector<Factory > :: iterator factory_1, factory_2;
+            for (factory_1=S.factories.begin(); factory_1!=S.factories.end(); ++factory_1){
+                if (factory_1->player == player_id){
+                     action_superset.push_back(new IncProd(factory_1->entity_id));
+                    for (factory_2=S.factories.begin(); factory_2!=S.factories.end(); ++factory_2){
+                        if (factory_1 != factory_2 && factory_2->player == -this->player_id)
+                            action_superset.push_back(new SendBomb(factory_1->entity_id, factory_2->entity_id));
+                        if (factory_1 != factory_2)
+                            action_superset.push_back(new SendTroops(factory_1->entity_id, factory_2->entity_id, (int) factory_1->troops*0.3));
+                    };
+                };
+            };
+            return action_superset;
+        };
+        float evaluate(Action* action, GameState S, int forward, float penalty){
+            int step = 0;
+            float action_score;
+            float initial_score = S.score(this->player_id);
+            action->apply(S, this->player_id);
+            //cerr << "In evaluate Action.." << action->toStr() << endl;
+            S.produce();
+            S.solveBattles();
+            action_score = S.score(this->player_id) - initial_score;
+            for (step = 1; step < forward; ++step){
+                S.moveEntities();
+                S.produce();
+                S.solveBattles();
+                action_score += (S.score(this->player_id) - initial_score) * penalty;
+                penalty *= penalty;
+            };
+            return action_score;
+        };
+        list <Action* > find_best_plan(GameState& S, int forward, float penalty){
+            list <Action* > action_plan, action_superset = available_actions(S);
+            Action* wait_action = new Action("WAIT");
+            Action* best_action = new Action("WAIT");
+            float wait_value = this->evaluate(wait_action, S, forward, penalty);
+            bool is_first = true;
+            auto start = chrono::system_clock::now();
+            auto end = chrono::system_clock::now();
+            cerr << "Wait value.." << wait_value << endl;
+            chrono::duration<double> elapsed_seconds = end-start;
+            while (is_first || best_action->toStr()!="WAIT" && elapsed_seconds.count()<0.04){
+                float best_value = wait_value;
+                list <Action* > :: iterator current_action;
+                for (current_action=action_superset.begin(); current_action!=action_superset.end(); ++current_action){
+                    float a_value = wait_value;
+                    if ((*current_action)->is_valid(S, player_id)){
+                        a_value = this->evaluate(*current_action, S, forward, penalty);
+                        //cerr << "Action.." << (*current_action)->toStr() << endl;
+                        //cerr << "Value..."<< a_value << endl;
+                    }
+                    else 
+                        current_action = action_superset.erase(current_action);
+                    if (a_value > best_value){
+                        best_value = a_value;
+                        best_action = *current_action;
+                        cerr << "Best Action.." << best_action->toStr() << endl;
+                        cerr << "Value..."<< best_value << endl;
+                    };  
+                    end = chrono::system_clock::now();
+                    elapsed_seconds = end-start;
+                    if (elapsed_seconds.count() > 0.04){
+                        break;
+                    }
+                }
+                action_plan.push_back(best_action);
+                best_action->apply(S, this->player_id);
+                is_first = false;
+            };
+            return action_plan;
         };
 };
 
 
-/*void apply_action(GameState &S, Action action){
-    if (action.prefix == "MOVE"){
-
-    }
-}*/
 /**
  * Auto-generated code below aims at helping you parse
  * the standard input according to the problem statement.
@@ -211,7 +334,7 @@ class SendBomb: public Action{
 
 int main()
 {   
-
+    Player player = Player(1);
     int factoryCount; // the number of factories
     cin >> factoryCount; cin.ignore();
     int linkCount; // the number of links between factories
@@ -247,10 +370,14 @@ int main()
         cerr << "Bombs..."<< state.bombs.size() << endl;
         // Write an action using cout. DON'T FORGET THE "<< endl"
         // To debug: cerr << "Debug messages..." << endl;
-
-        Action wait = Action("WAIT");
+        list<Action* > plan = player.find_best_plan(state, 4, 0.9);
+        list<Action* > :: iterator current_action;
+        string command = "";
+        for (current_action=plan.begin(); current_action!=plan.end(); ++current_action)
+            command += (*current_action)->toStr() + ";";
         // Any valid action, such as "WAIT" or "MOVE source destination cyborgs"
         //cout << "WAIT" << endl;
-        cout << wait.toStr() << endl;
+        //cout << wait.toStr() << endl;
+        cout << command.substr(0, command.size()-1) << endl;
     }
 }

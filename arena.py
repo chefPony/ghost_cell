@@ -8,6 +8,7 @@ from subprocess import Popen, PIPE
 import threading
 from queue import Queue, Empty
 from constants import TIMEOUT_MOVE
+from main import main
 
 class Battle:
 
