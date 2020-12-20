@@ -25,7 +25,7 @@ struct Factory{
 };
 
 struct Troop{
-    int entity_id, player, troops, source, destination, distance;
+    int entity_id, player,  source, destination, troops, distance;
     string entity_type = "TROOP";
 };
 
@@ -82,6 +82,7 @@ class GameState{
             vector<Factory > :: iterator factory;
             for(factory=this->factories.begin(); factory!=this->factories.end(); ++factory){
                 factory->troops += factory->prod * (factory->damage == 0) * (factory->player != 0);
+                factory->damage -= 1 * (factory->damage > 0);
             };
         };
         void solveBattles();
@@ -144,11 +145,11 @@ float GameState :: score(int player){
     float points = 0;
     for(factory= this->factories.begin(); factory != this->factories.end(); ++factory){
         if (factory->player == player)
-            points += factory->troops + factory->prod * 10 + 1;
+            points += factory->troops + factory->prod * 10 + 5;
     };
     for(troop= this->troops.begin(); troop != this->troops.end(); ++troop){
         if (troop->player == player)
-            points += troop->troops - troop->distance;
+            points += troop->troops * pow(0.9, troop->distance);
     };
     return points;
 };
@@ -207,6 +208,7 @@ class SendBomb: public Action{
             return bombStr;
         };
         bool is_valid(const GameState &S, const int player){
+            //cerr <<"FUUUUUUU" << S.bomb_reserve[PLAYER_MAP.at(player)] << endl;
             if (S.factories[this->source].player == player && this->source != this->target && S.bomb_reserve[PLAYER_MAP.at(player)] > 0){
                 return true;
             }
@@ -248,6 +250,7 @@ class IncProd: public Action{
 
 class Player{
     int player_id;
+    int n_bombs = 2; 
     public:
         Player(int player_id){this->player_id = player_id;};
         list<Action* > available_actions(GameState& S){
@@ -296,21 +299,22 @@ class Player{
             chrono::duration<double> elapsed_seconds = end-start;
             while (is_first || best_action->toStr()!="WAIT" && elapsed_seconds.count()<0.04){
                 float best_value = wait_value;
+                best_action = wait_action;
                 list <Action* > :: iterator current_action;
                 for (current_action=action_superset.begin(); current_action!=action_superset.end(); ++current_action){
                     float a_value = wait_value;
+                    //cerr << "Action.." << (*current_action)->toStr() << endl;
+                    //cerr << "Valid.." << (*current_action)->is_valid(S, this->player_id) << endl;
                     if ((*current_action)->is_valid(S, player_id)){
                         a_value = this->evaluate(*current_action, S, forward, penalty);
-                        //cerr << "Action.." << (*current_action)->toStr() << endl;
-                        //cerr << "Value..."<< a_value << endl;
+                        cerr << "Action.." << (*current_action)->toStr() << endl;
+                        cerr << "Value..."<< a_value << endl;
                     }
                     else 
                         current_action = action_superset.erase(current_action);
                     if (a_value > best_value){
                         best_value = a_value;
                         best_action = *current_action;
-                        cerr << "Best Action.." << best_action->toStr() << endl;
-                        cerr << "Value..."<< best_value << endl;
                     };  
                     end = chrono::system_clock::now();
                     elapsed_seconds = end-start;
@@ -319,7 +323,18 @@ class Player{
                     }
                 }
                 action_plan.push_back(best_action);
+                /*cerr << "BEFORE APPLY" << endl;
+                cerr << "Bombs Remaining.."<< S.bomb_reserve[PLAYER_MAP.at(this->player_id)] << endl;
+                cerr << "Troops Moving.."<< S.troops.size() << endl;
+                cerr << "Bomb Moving.."<< S.bombs.size() << endl;*/
                 best_action->apply(S, this->player_id);
+                /*cerr << "APPLY" << endl;
+                cerr << "Best Action.." << best_action->toStr() << endl;
+                cerr << "Value..."<< best_value << endl;
+                cerr << "AFTER APPLY" << endl;
+                cerr << "Bombs Remaining.."<< S.bomb_reserve[PLAYER_MAP.at(this->player_id)] << endl;
+                cerr << "Troops Moving.."<< S.troops.size() << endl;
+                cerr << "Bomb Moving.."<< S.bombs.size() << endl;*/
                 is_first = false;
             };
             return action_plan;
@@ -370,7 +385,7 @@ int main()
         cerr << "Bombs..."<< state.bombs.size() << endl;
         // Write an action using cout. DON'T FORGET THE "<< endl"
         // To debug: cerr << "Debug messages..." << endl;
-        list<Action* > plan = player.find_best_plan(state, 4, 0.9);
+        list<Action* > plan = player.find_best_plan(state, 6, 0.9);
         list<Action* > :: iterator current_action;
         string command = "";
         for (current_action=plan.begin(); current_action!=plan.end(); ++current_action)
