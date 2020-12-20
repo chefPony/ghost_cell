@@ -10,6 +10,7 @@ from queue import Queue
 import argparse
 import multiprocessing as mp
 import psutil
+import sys
 PARALLEL = False
 NUM_CPU = psutil.cpu_count(logical = False)
 
@@ -61,14 +62,16 @@ def main():
 
     start = time()
     pool = mp.Pool(NUM_CPU)
-    print(f"Parallelize simulation on {NUM_CPU} cores")
+
     records = list()
     if PARALLEL:
+        print(f"Parallelize simulation on {NUM_CPU} cores")
         records = pool.map(simulator.simulate, list(factory_counts))
     else:
         for n_factory in factory_counts:
             r = simulator.simulate(factory_count=n_factory)
             records.append(r)
+
     stat = pd.DataFrame.from_records(records)
     stat.to_csv(f"simulation_{args.player_1.split('.')[0]}_vs_{args.player_2.split('.')[0]}.csv", index=False)
 
