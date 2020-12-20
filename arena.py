@@ -56,7 +56,7 @@ class Scenario:
         self.bomb_counter = {1: 2, -1: 2}
         self.troop_id = 0
         self.bomb_id = 0
-        self.winner = 0
+        self.winner = -2
         self.win_condition = None
         self.turn = 1
 
@@ -131,15 +131,15 @@ class Scenario:
                 about_to_explode.append(bomb.entity_id)
 
         input_str = self.input
-        print(f"Turn {self.turn}")
-        print(f"{len(self.troops)}")
+        #print(f"Turn {self.turn}")
+        #print(f"{len(self.troops)}")
         for player, (bot, q, qe) in self.players.items():
             bot.stdin.write(input_str[player]+"\n")
             bot.stdin.flush()
             try:
                 start = time()
                 action_plan = q.get(timeout=self.timeout).replace("\n", "")
-                print(f"{player}| {action_plan} took {(time() - start)*1e3}ms")
+                #print(f"{player}| {action_plan} took {(time() - start)*1e3}ms")
                 bot.stdout.flush()
 
             except Empty:
@@ -152,7 +152,7 @@ class Scenario:
                     try:
                         self.apply_action(action_str, player)
                     except InvalidAction:
-                        #print(f"Player {player} invalid action input {action_str}")
+                        print(f"Player {player} invalid action input {action_str}")
                         self.winner = -1 * player
                         self.win_condition = "invalid action"
                         return
@@ -195,9 +195,9 @@ class Scenario:
         return input_str
 
     def match(self):
-        while self.winner == 0:
+        while self.winner == -2:
             self.play()
-
+        print(f"Winner is {self.winner} by {self.win_condition}")
         return self.winner
 
 def apply_message(scenario):
@@ -255,7 +255,7 @@ def enqueue_output(out, err, queue, queue_err):
 
 if __name__ == "__main__":
 
-    p0 = Popen(['./bot_cpp'], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=1)
+    p0 = Popen(['python', 'main.py'], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=1)
     p1 = Popen(['python', 'wait_player.py'], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=1)
 
     p0_queue, p1_queue = Queue(), Queue()
