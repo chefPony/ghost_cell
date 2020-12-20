@@ -307,8 +307,8 @@ class Player{
                     //cerr << "Valid.." << (*current_action)->is_valid(S, this->player_id) << endl;
                     if ((*current_action)->is_valid(S, player_id)){
                         a_value = this->evaluate(*current_action, S, forward, penalty);
-                        cerr << "Action.." << (*current_action)->toStr() << endl;
-                        cerr << "Value..."<< a_value << endl;
+                        //cerr << "Action.." << (*current_action)->toStr() << endl;
+                        //cerr << "Value..."<< a_value << endl;
                     }
                     else 
                         current_action = action_superset.erase(current_action);
@@ -318,7 +318,7 @@ class Player{
                     };  
                     end = chrono::system_clock::now();
                     elapsed_seconds = end-start;
-                    if (elapsed_seconds.count() > 0.04){
+                    if (elapsed_seconds.count() > 0.03){
                         break;
                     }
                 }

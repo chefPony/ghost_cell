@@ -320,10 +320,8 @@ def heuristic_evaluate(action, game):
             action.destination, PROD]
         target_troops, target_incoming = game.factories[action.destination, TROOPS], game.factories[
             action.destination, PROD]
-        prize = target_prod * (target_player != 1)
-        troops_matrix = game.troops.copy()
-        enemy_troops = troops_matrix[action.destination, :, PLAYER_MAP[-1]]
-        ally_troops = troops_matrix[action.destination, :, PLAYER_MAP[1]]
+        enemy_troops = game.troops_matrix[action.destination, :, PLAYER_MAP[-1]]
+        ally_troops = game.troops_matrix[action.destination, :, PLAYER_MAP[1]]
         incidence = np.triu(np.ones((game.max_distance + 1, game.max_distance + 1), dtype=int))
         incidence_prod = np.triu(-np.ones((game.max_distance + 1, game.max_distance + 1), dtype=int), k=1)
         cumul_ally, cumul_enemy = ally_troops.dot(incidence), enemy_troops.dot(incidence)
@@ -354,7 +352,7 @@ class Player:
         inc_list = [IncreaseProd(factory=source_id) for source_id in sources]
         # wait_list.append(Wait())
         action_list = move_list + inc_list
-        print(f"Got available actions in {(time() - init_get_actions) * 1e3}ms", file=sys.stderr, flush=True)
+        #print(f"Got available actions in {(time() - init_get_actions) * 1e3}ms", file=sys.stderr, flush=True)
         return action_list
 
     def get_plan(self, game: Game, time_limit=45):
@@ -369,18 +367,18 @@ class Player:
         n = 0
         game_copy = game.clone()
         while t < time_limit:
-            print(f"Cycles {n}", file=sys.stderr, flush=True)
+            #print(f"Cycles {n}", file=sys.stderr, flush=True)
             opt_start = time()
             action_list = [a for a in self.get_actions(game_copy) if a.is_valid(game_copy)]
             action_sample = np.random.choice(action_list, size=(min(30, len(action_list)),), replace=False)
             action_sample = list(action_sample)
             action_sample.append(Wait())
-            print(f"{action_sample}", file=sys.stderr, flush=True)
+            #print(f"{action_sample}", file=sys.stderr, flush=True)
             optimized_values = list(map(lambda x: self.move_action_eval.optimize(x, game_copy), action_sample))
             a_list = {a.str: v for a, v in zip(action_sample, optimized_values)}
-            print(f"Action values : {a_list}", file=sys.stderr, flush=True)
+            #print(f"Action values : {a_list}", file=sys.stderr, flush=True)
             opt_time = opt_time + time() - opt_start
-            print(f"Opt time : {(time() - opt_start) * 1e3}", file=sys.stderr, flush=True)
+            #print(f"Opt time : {(time() - opt_start) * 1e3}", file=sys.stderr, flush=True)
             action = action_sample[np.argmax(optimized_values)]
             # print(f"Best : {np.argmax(optimized_values)}", file=sys.stderr, flush=True)
             # print(f"Action: {action.to_str()}", file=sys.stderr, flush=True)
@@ -390,9 +388,9 @@ class Player:
             if isinstance(action, Wait):
                 break
             t = (time() - init_plan) * 1e3
-            print(f"Time elapsed {t}", file=sys.stderr, flush=True)
+            #print(f"Time elapsed {t}", file=sys.stderr, flush=True)
             n = n + 1
-        print(f"Action optimization takes {opt_time * 1e3}ms", file=sys.stderr, flush=True)
+        #print(f"Action optimization takes {opt_time * 1e3}ms", file=sys.stderr, flush=True)
         return plan
 
     def execute_plan(self, plan):
@@ -402,28 +400,28 @@ class Player:
 
 game = Game()
 game.initialize(input)
-move_action_evaluator = ActionEvaluator(criterion=heuristic_evaluate, optimizer=do_not_optimize)
+move_action_evaluator = ActionEvaluator(criterion=evaluate_with_states, optimizer=do_not_optimize)
 prod_action_evaluator = ActionEvaluator(criterion=lambda x: -10000, optimizer=lambda x: -10000)
 bomb_action_evaluator = ActionEvaluator(criterion=lambda x: -10000, optimizer=lambda x: -10000)
 agent = Player(player_id=1, move_action_eval=move_action_evaluator, bomb_action_eval=bomb_action_evaluator,
                prod_action_eval=prod_action_evaluator)
 # game loop
-print(f"{game.distance_matrix}", file=sys.stderr, flush=True)
+#print(f"{game.distance_matrix}", file=sys.stderr, flush=True)
 while True:
     start = time()
     #print(f"{type(input)} {input}", file=sys.stderr, flush=True)
     game.current_status(input)
-    print(f"Got game status in {(time() - start) * 1e3}ms", file=sys.stderr, flush=True)
+    #print(f"Got game status in {(time() - start) * 1e3}ms", file=sys.stderr, flush=True)
     # Write an action using print
     # To debug: print("Debug messages...", file=sys.stderr, flush=True)
     # _delta_move(game, player_priority={0:10, 1:2, -1:20})
     # Any valid action, such as "WAIT" or "MOVE source destination cyborgs"
     start_plan = time()
-    action_plan = agent.get_plan(game, time_limit=45)
-    print(f"Action plan in {(time() - start_plan) * 1e3}ms", file=sys.stderr, flush=True)
+    action_plan = agent.get_plan(game, time_limit=35)
+    #print(f"Action plan in {(time() - start_plan) * 1e3}ms", file=sys.stderr, flush=True)
     # print(f"{action_plan}", file=sys.stderr, flush=True)
     if len(action_plan) == 0:
         print("WAIT")
     else:
         agent.execute_plan(action_plan)
-    print(f"Turn took {(time() - start) * 1e3}ms", file=sys.stderr, flush=True)
+    #print(f"Turn took {(time() - start) * 1e3}ms", file=sys.stderr, flush=True)
