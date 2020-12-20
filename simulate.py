@@ -26,21 +26,21 @@ class Simulator:
 
 
     def simulate(self, factory_count):
-        p0 = Popen(["./"+self.player_1], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=1)
-        p1 = Popen(['python', self.player_2], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=1)
+        p0 = Popen(["./"+self.player_1], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=-1)
+        p1 = Popen(['python', self.player_2], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=-1)
 
-        p0_queue, p1_queue = Queue(), Queue()
-        thread0 = threading.Thread(target=enqueue_output, args=(p0.stdout, p0_queue))
-        thread1 = threading.Thread(target=enqueue_output, args=(p1.stdout, p1_queue))
+        p0_queue, p1_queue, p0_err, p1_err = Queue(), Queue(), Queue(), Queue()
+        thread0 = threading.Thread(target=enqueue_output, args=(p0.stdout, p0.stderr, p0_queue, p0_err))
+        thread1 = threading.Thread(target=enqueue_output, args=(p1.stdout, p1.stderr, p1_queue, p1_err))
         thread0.daemon, thread1.daemon = True, True
         thread0.start(), thread1.start()
 
         scenario = ScenarioGenerator.generate(factory_count=factory_count)
         if int(time()*1e4) % 2 == 0:
-            scenario.players = {1: (p0, p0_queue), -1: (p1, p1_queue)}
+            scenario.players = {1: (p0, p0_queue, p0_err), -1: (p1, p1_queue, p1_err)}
             bot_player = {1: self.player_1, -1: self.player_2}
         else:
-            scenario.players = {-1: (p0, p0_queue), 1: (p1, p1_queue)}
+            scenario.players = {-1: (p0, p0_queue, p0_err), 1: (p1, p1_queue, p1_err)}
             bot_player = {-1: self.player_1, 1: self.player_2}
         start_game = time()
         scenario.match()
