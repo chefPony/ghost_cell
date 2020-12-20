@@ -26,7 +26,7 @@ class Simulator:
 
 
     def simulate(self, factory_count):
-        p0 = Popen(['python', self.player_1], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=1)
+        p0 = Popen(["./"+self.player_1], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=1)
         p1 = Popen(['python', self.player_2], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=1)
 
         p0_queue, p1_queue = Queue(), Queue()

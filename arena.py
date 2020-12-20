@@ -8,7 +8,7 @@ from subprocess import Popen, PIPE
 import threading
 from queue import Queue, Empty
 from constants import TIMEOUT_MOVE
-from main import main
+
 
 class Battle:
 
@@ -124,8 +124,11 @@ class Scenario:
         for _, troop in self.troops.items():
             troop.move()
 
-        for bomb in self.bombs:
+        about_to_explode = list()
+        for _, bomb in self.bombs.items():
             bomb.move()
+            if bomb.distance == 0:
+                about_to_explode.append(bomb.entity_id)
 
         input_str = self.input
         print(f"Turn {self.turn}")
@@ -164,7 +167,8 @@ class Scenario:
             battle.resolve()
             battle.clean_scenario(self)
 
-        for bomb in self.bombs:
+        for bomb_id in about_to_explode:
+            bomb = self.bombs.pop(bomb_id)
             bomb.explode()
 
         self.check_win_condition()
@@ -186,7 +190,7 @@ class Scenario:
                                                e.destination.entity_id, e.troops, e.distance]))
                             for _, e in self.troops.items()]
             input_bombs = [" ".join(map(str, [e.entity_id, e.entity_type, e.player * player, e.source.entity_id,
-                                              e.destination.entity_id, e.distance, "0"])) for e in self.bombs]
+                                              e.destination.entity_id, e.distance, "0"])) for _, e in self.bombs.items()]
             input_str[player] = "\n".join(input_common + input_factory + input_troops + input_bombs)
         return input_str
 
@@ -218,7 +222,6 @@ def apply_move(scenario, source, destination, n_cyborgs, player):
             distance=scenario.distance_matrix[int(source), int(destination)], player=player)
         scenario.troop_id += 1
 
-
 def apply_bomb(scenario, source, destination, player):
     if source == destination:
         raise InvalidAction(f"Player {player}: bomb source must be different from destination")
@@ -227,10 +230,10 @@ def apply_bomb(scenario, source, destination, player):
     elif scenario.bomb_counter[player] == 0:
         raise InvalidAction(f"Player {player}: does not have bombs")
     else:
-        scenario.bombs.append(Bomb(entity_id=scenario.bomb_id, source=scenario.factories[int(source)],
-                                   destination=scenario.factories[int(destination)], player=player,
-                                   distance=scenario.distance_matrix[int(source), int(destination)]))
-        scenario.bomb_counter[player.player_id] -= 1
+        scenario.bombs[scenario.bomb_id] = Bomb(entity_id=scenario.bomb_id, source=scenario.factories[int(source)],
+                                                destination=scenario.factories[int(destination)], player=player,
+                                                distance=scenario.distance_matrix[int(source), int(destination)])
+        scenario.bomb_counter[player] -= 1
         scenario.bomb_id += 1
 
 
@@ -249,8 +252,8 @@ def enqueue_output(out, queue):
 
 if __name__ == "__main__":
 
-    p0 = Popen(['python', 'main.py'], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=1)
-    p1 = Popen(['python', 'main2.py'], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=1)
+    p0 = Popen(['./bot_cpp'], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=1)
+    p1 = Popen(['python', 'wait_player.py'], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=1)
 
     p0_queue, p1_queue = Queue(), Queue()
     q_err = Queue()
@@ -260,7 +263,7 @@ if __name__ == "__main__":
     thread0.daemon, thread1.daemon, threaderr.daemon = True, True, True
     thread0.start(), thread1.start(), threaderr.start()
 
-    scenario = Scenario(factories=[Factory(0, 1, 30, 0), Factory(1, -1, 15, 0)], links=[(0, 1, 5)])
+    scenario = Scenario(factories=[Factory(0, 1, 30, 0), Factory(1, -1, 15, 0)], links=[(0, 1, 3)])
     scenario.players = {1: (p0, p0_queue), -1: (p1, p1_queue)}
     scenario.match()
 
