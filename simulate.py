@@ -51,6 +51,7 @@ class Simulator:
             bot_player = {-1: self.player_1, 1: self.player_2}
         start_game = time()
         scenario.match()
+        print(f"Winner is {bot_player[scenario.winner]} as player {scenario.winner} by {scenario.win_condition}")
         result = {"win": bot_player[scenario.winner], "win_condition": scenario.win_condition,
                   "turn": scenario.turn, "factory_count": factory_count, "as_player": scenario.winner,
                   "final_score": " ".join([f"{player}|{score} " for player, score in scenario.score.items()]),

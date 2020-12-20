@@ -197,7 +197,7 @@ class Scenario:
     def match(self):
         while self.winner == -2:
             self.play()
-        print(f"Winner is {self.winner} by {self.win_condition}")
+        #print(f"Winner is {self.winner} by {self.win_condition}")
         return self.winner
 
 def apply_message(scenario):
