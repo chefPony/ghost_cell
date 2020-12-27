@@ -132,7 +132,7 @@ class Scenario:
                 about_to_explode.append(bomb.entity_id)
 
         input_str = self.input
-        print(f"Turn {self.turn}")
+        #print(f"Turn {self.turn}", file=sys.stderr)
         #print(f"{len(self.troops)}")
         for player, bot in self.players.items():
             bot.stdin.write(input_str[player]+"\n")
