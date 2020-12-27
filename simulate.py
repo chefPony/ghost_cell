@@ -1,16 +1,17 @@
-from scenario_generator import ScenarioGenerator
-from constants import MIN_FACTORY_COUNT, MAX_FACTORY_COUNT
-import pandas as pd
-import numpy as np
 from time import time
-import threading
 from subprocess import Popen, PIPE
-from queue import Queue
 import argparse
 import multiprocessing as mp
 import psutil
 import sys
-PARALLEL = False
+
+import pandas as pd
+import numpy as np
+
+from scenario_generator import ScenarioGenerator
+from constants import MIN_FACTORY_COUNT, MAX_FACTORY_COUNT
+
+PARALLEL = True
 NUM_CPU = psutil.cpu_count(logical = False)
 
 parser = argparse.ArgumentParser(description='Simulate ghost in the cell game')
@@ -35,11 +36,6 @@ class Simulator:
             p1 = Popen(['python', self.player_2], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=-1)
         else:
             p1 = Popen(["./" + self.player_2], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=-1)
-        #p0_queue, p1_queue, p0_err, p1_err = Queue(), Queue(), Queue(), Queue()
-        #thread0 = threading.Thread(target=enqueue_output, args=(p0.stdout, p0.stderr, p0_queue, p0_err))
-        #thread1 = threading.Thread(target=enqueue_output, args=(p1.stdout, p1.stderr, p1_queue, p1_err))
-        #thread0.daemon, thread1.daemon = True, True
-        #thread0.start(), thread1.start()
 
         scenario = ScenarioGenerator.generate(factory_count=factory_count)
         if int(time()*1e4) % 2 == 0:
@@ -50,8 +46,8 @@ class Simulator:
             bot_player = {-1: self.player_1, 1: self.player_2}
         start_game = time()
         scenario.match()
-        print(f"Winner is {bot_player[scenario.winner]} as player {scenario.winner} by {scenario.win_condition}",
-              file=sys.stderr)
+        print(f"Winner is {bot_player.get(scenario.winner, None)} by {scenario.win_condition} in "
+              f"{np.around(time()-start_game, 2)}s", file=sys.stderr)
         result = {"win": bot_player[scenario.winner], "win_condition": scenario.win_condition,
                   "turn": scenario.turn, "factory_count": factory_count, "as_player": scenario.winner,
                   "final_score": " ".join([f"{player}|{score} " for player, score in scenario.score.items()]),
