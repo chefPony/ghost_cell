@@ -255,7 +255,7 @@ def read_from_stdout(process, timeout):
 
 if __name__ == "__main__":
 
-    p0 = Popen(['python', 'main.py'], stdout=PIPE, stdin=PIPE,  shell=False, text=True, bufsize=1)
+    p0 = Popen(['python', 'heuristic_bot.py'], stdout=PIPE, stdin=PIPE,  shell=False, text=True, bufsize=1)
     p1 = Popen(['python', 'wait_player.py'], stdout=PIPE, stdin=PIPE,  shell=False, text=True, bufsize=1)
 
     #p0_queue, p1_queue = Queue(), Queue()
