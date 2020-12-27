@@ -133,7 +133,7 @@ class Scenario:
         input_str = self.input
         #print(f"Turn {self.turn}")
         #print(f"{len(self.troops)}")
-        for player, (bot, q, qe) in self.players.items():
+        for player, (bot, q) in self.players.items():
             bot.stdin.write(input_str[player]+"\n")
             bot.stdin.flush()
             try:
@@ -244,29 +244,27 @@ def apply_inc(scenario, factory, player):
         scenario.factories[factory].increment_prod()
 
 
-def enqueue_output(out, err, queue, queue_err):
+def enqueue_output(out, queue):
     for line in iter(out.readline, b''):
         queue.put(line)
     out.close()
-    for line in iter(err.readline, b''):
-        queue_err.put(line)
-    err.close()
+
 
 
 if __name__ == "__main__":
 
-    p0 = Popen(['python', 'main.py'], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=1)
-    p1 = Popen(['python', 'wait_player.py'], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=1)
+    p0 = Popen(['python', 'main.py'], stdout=PIPE, stdin=PIPE,  shell=False, text=True, bufsize=1)
+    p1 = Popen(['python', 'wait_player.py'], stdout=PIPE, stdin=PIPE,  shell=False, text=True, bufsize=1)
 
     p0_queue, p1_queue = Queue(), Queue()
-    p0_err, p1_err = Queue(), Queue()
-    thread0 = threading.Thread(target=enqueue_output, args=(p0.stdout, p0.stderr, p0_queue, p0_err))
-    thread1 = threading.Thread(target=enqueue_output, args=(p1.stdout, p1.stderr, p1_queue, p1_err))
+    #p0_err, p1_err = Queue(), Queue()
+    thread0 = threading.Thread(target=enqueue_output, args=(p0.stdout, p0_queue))
+    thread1 = threading.Thread(target=enqueue_output, args=(p1.stdout, p1_queue))
     thread0.daemon, thread1.daemon = True, True
     thread0.start(), thread1.start()
 
     scenario = Scenario(factories=[Factory(0, 1, 30, 0), Factory(1, -1, 15, 0)], links=[(0, 1, 3)])
-    scenario.players = {1: (p0, p0_queue, p0_err), -1: (p1, p1_queue, p1_err)}
+    scenario.players = {1: (p0, p0_queue), -1: (p1, p1_queue)}
     scenario.match()
 
     p0.terminate(), p1.terminate()
