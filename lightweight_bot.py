@@ -1,131 +1,9 @@
 import numpy as np
-import sys
-import math
-from copy import copy
 from collections import defaultdict
 from time import time
 
 ID, PLAYER, TROOPS, PROD, FROM, TO, SIZE, DIST, BLOCKED = 0, 1, 2, 3, 2, 3, 4, 5, 5
 PLAYER_MAP = {-1: 1, 1: 0}
-
-class Action:
-    def apply(self, game):
-        pass
-
-    def is_valid(self, game):
-        raise NotImplementedError
-
-    @property
-    def str(self):
-        raise NotImplementedError
-
-
-class Wait(Action):
-    def __init__(self):
-        self.prefix = "WAIT"
-
-    def is_valid(self, game):
-        return True
-
-    def apply(self, game):
-        pass
-
-    @property
-    def str(self):
-        return f"{self.prefix}"
-
-
-class Message(Action):
-    def __init__(self, message):
-        self.prefix = "MSG"
-        self.message = message
-
-    def is_valid(self, game):
-        return True
-
-    @property
-    def str(self):
-        return f"{self.prefix} {self.message}"
-
-
-class Move(Action):
-    def __init__(self, source, destination, cyborg_count):
-        self.source = int(source)
-        self.destination = int(destination)
-        self.cyborg_count = int(cyborg_count)
-        self.prefix = "MOVE"
-
-    @property
-    def str(self):
-        return f"{self.prefix} {self.source} {self.destination} {self.cyborg_count}"
-
-    def apply(self, game):
-        game.factories[self.source, TROOPS] = game.factories[self.source, TROOPS] - self.cyborg_count
-        distance = game.distance_matrix[self.source, self.destination]
-        factory_update = time()
-        game.update_troop(entity_id=-1, player=1, source=self.source, destination=self.destination,
-                          troops=self.cyborg_count, distance=distance)
-
-    def is_valid(self, game):
-        if game.factories[self.source, PLAYER] != 1:
-            return False
-        elif self.source == self.destination:
-            return False
-        elif self.cyborg_count <= 0:
-            return False
-        else:
-            return True
-
-
-class IncreaseProd(Action):
-    def __init__(self, factory):
-        self.factory = int(factory)
-        self.prefix = "INC"
-
-    def apply(self, game):
-        game.factories[self.factory, PROD] += 1
-        game.factories[self.factory, TROOPS] += -10
-
-    def is_valid(self, game):
-        if game.factories[self.factory, PLAYER] != 1:
-            return False
-        elif game.factories[self.factory, TROOPS] < 10:
-            return False
-        elif game.factories[self.factory, PROD] > 2:
-            return False
-        else:
-            return True
-
-    @property
-    def str(self):
-        return f"{self.prefix} {self.factory}"
-
-
-class SendBomb(Action):
-    def __init__(self, source, destination):
-        self.source = source
-        self.destination = destination
-        self.prefix = "BOMB"
-
-    def is_valid(self, game):
-        source_attr = game.factories.loc[self.source]
-        if source_attr.player != 1:
-            return False
-        else:
-            return True
-
-    def apply(self, game):
-        init_clone = time()
-        game_proj = game.clone()
-        end_clone = time()
-        distance = game.distance_matrix[self.source, self.destination]
-        factory_update = time()
-        game_proj.update_bomb(entity_id=-1, player=1, source=self.source, destination=self.destination)
-        troop_update = time()
-
-    @property
-    def str(self):
-        return f"{self.prefix} {self.source} {self.destination}"
 
 class GameState:
     def __init__(self):
@@ -140,7 +18,7 @@ class GameState:
             factory_1, factory_2, distance = [int(j) for j in input().split()]
             self.distance_matrix[factory_1, factory_2], self.distance_matrix[factory_2, factory_1] = distance, distance
         self.max_distance = np.max(self.distance_matrix)
-        self.factories = np.zeros((self.factory_count, 6))
+        self.factories = np.zeros((self.factory_count, 6), dtype=int)
         self.troops = np.zeros((self.factory_count, self.max_distance + 1, 2), dtype=int)
         self.bombs = defaultdict(list)
 
@@ -174,6 +52,7 @@ class GameState:
             elif entity_type == "BOMB":
                 self.update_bomb(entity_id, player=arg_1, source=arg_2, destination=arg_3, distance=arg_4)
 
+
 class Player:
 
     def __init__(self, player_id: int, moving_troop_dist_th: int, moving_troop_discount: float,
@@ -184,6 +63,7 @@ class Player:
         self.stationing_troop_dist_th = stationing_troop_dist_th
         self.stationing_troop_discount = stationing_troop_discount
         self.state = None
+        self.action_list = list()
 
     def get_state(self, game_state: GameState):
         self.state = game_state
@@ -225,29 +105,88 @@ class Player:
 
         return required_to_take
 
-    def _move_value_matrix(self):
+    def _generate_value_matrices(self):
         self.required_troops = np.array([self._required_troops(factory_id)
-                                         for factory_id in self.state.factories[:, ID]])
-        self.available_troops = np.where(self.my_factories,
-                                         np.max(self.state.factories[:, TROOPS] - self.required_troops, 0), 0)
+                                         for factory_id in self.state.factories[:, ID]]).reshape(-1, 1)
+        self.available_troops = np.where(self.my_factories[:, None], self.state.factories[:, TROOPS, None]
+                                         - self.required_troops, 0)
+        self.available_troops = np.floor(abs(self.available_troops) * (self.available_troops > 0))
         self.total_capacity = sum(self.available_troops)
+
         self.required_troops[self.my_factories] =\
-            abs(self.required_troops[self.my_factories] - self.state.factories[self.my_factories, TROOPS]) * \
-               (self.required_troops[self.my_factories] > self.state.factories[self.my_factories, TROOPS])
+            abs(self.required_troops[self.my_factories] - self.state.factories[self.my_factories, TROOPS].reshape(-1, 1)) * \
+               (self.required_troops[self.my_factories] > self.state.factories[self.my_factories, TROOPS].reshape(-1, 1))
+        self.required_troops = np.floor(self.required_troops)
 
-        self.troops_ratio_matr = np.dot(self.available_troops.reshape(-1, 1),
-                                        1./(self.required_troops.reshape(1, -1) + 1e-6))
-        self.troops_ratio_matr[self.my_factories, self.my_factories] *= self.required_troops[self.my_factories] > 0
+        self.required_move = np.dot(self.required_troops > 0, np.ones((1, self.state.factory_count))).T
+        self.troops_ratio_matr = np.dot(self.available_troops, 1./(self.required_troops.T + 1e-6))
+        #self.troops_ratio_matr = np.nan_to_num(self.troops_ratio_matr)
 
+        # DOES NOT CHANGE AFTER MOVE
         self.factory_value_matr = np.dot(self._compute_factories_value().reshape(-1, 1),
                                          np.ones((1, self.state.factory_count))).T
         self.distance_discount_matr = np.power(np.array(self.moving_troop_discount),
                                                np.maximum(self.state.distance_matrix-1, 0))
-        self.move_value_matrix = self.factory_value_matr * self.distance_discount_matr * self.troops_ratio_matr
 
-    def execute_plan(self, plan):
-        print(f"{plan}", file=sys.stderr, flush=True)
-        print(";".join(plan))
+        #self.production_penalty = np.dot(self.state.factories[:, PROD].reshape(-1, 1),
+        #                                 np.ones((1, self.state.factory_count))).T
+        #production_penalty = np.where(self.state.factories[:, PLAYER] != 0, self.state.factories[:, PROD], 0)
+
+        self.move_value_matrix = self.required_move * self.factory_value_matr * self.distance_discount_matr * self.troops_ratio_matr
+
+    def select_move(self):
+        ordered_targets = reversed(np.argsort(np.sum(self.move_value_matrix, axis=0)))
+        for target_id in ordered_targets:
+            if np.sum(self.move_value_matrix, axis=0)[target_id] == 0:
+                continue
+            discount_ratio = self.distance_discount_matr[:, target_id] * self.troops_ratio_matr[:, target_id]
+            if sum(discount_ratio) > 1:
+                ordered_sources = np.array(list(reversed(np.argsort(self.move_value_matrix[:, target_id]))))
+                to_consider = (self.state.factories[ordered_sources, PLAYER] == self.player_id) & \
+                              (ordered_sources != target_id)
+                ordered_sources = ordered_sources[to_consider]
+                k = 0
+                total_discount_ratio = 0
+                while total_discount_ratio < 1:
+                    source_id = ordered_sources[k]
+                    n_cyborgs = int((1./discount_ratio[source_id]) * self.available_troops[source_id])
+                    self.action_list.append(f"MOVE {source_id} {target_id} {n_cyborgs}")
+                    total_discount_ratio += discount_ratio[source_id]
+                    k += 1
+                    self.total_capacity -= n_cyborgs
+                    self.available_troops[source_id] -= n_cyborgs
+                    self.available_troops = np.floor(self.available_troops)
+                    self.required_troops[target_id] -= n_cyborgs
+                    self.required_troops = np.floor(self.required_troops)
+                    self.required_move = np.dot(self.required_troops > 0, np.ones((1, self.state.factory_count))).T
+                    self.move_value_matrix /= self.troops_ratio_matr + 1e-6
+                    self.troops_ratio_matr *= np.dot(self.available_troops, 1. /(self.required_troops + 1e-6).T)
+                    self.move_value_matrix *= self.troops_ratio_matr * self.required_move
+            else:
+                pass
+            if self.total_capacity <= 0:
+                break
+
+    def select_increments(self):
+        if self.total_capacity < 10:
+            return
+        for source_id, available in enumerate(self.available_troops):
+            if (available > 10) & (self.state.factories[source_id, PROD]<3):
+                self.action_list.append(f"INC {source_id}")
+
+    def select_plan(self):
+        self._generate_value_matrices()
+        self.select_move()
+        self.select_increments()
+        if len(self.action_list) == 0:
+            self.action_list.append("WAIT")
+
+    def execute_plan(self):
+        #print(f"{plan}", file=sys.stderr, flush=True)
+        print(";".join(self.action_list))
+
+    def reset(self):
+        self.action_list = list()
 
 
 if __name__ == "__main__":
@@ -264,10 +203,8 @@ if __name__ == "__main__":
         # To debug: print("Debug messages...", file=sys.stderr, flush=True)
         # Any valid action, such as "WAIT" or "MOVE source destination cyborgs"
         start_plan = time()
-        action_plan = agent.get_plan(game, time_limit=35)
-        if len(action_plan) == 0:
-            print("WAIT")
-        else:
-            agent.execute_plan(action_plan)
+        agent.select_plan()
+        agent.execute_plan()
+        agent.reset()
         game.troops[:, :, :] = 0
 
