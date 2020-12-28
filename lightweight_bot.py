@@ -142,6 +142,9 @@ class Player:
     def select_move(self):
         ordered_targets = reversed(np.argsort(np.sum(self.move_value_matrix, axis=0)))
         for target_id in ordered_targets:
+            total_value = np.sum(self.move_value_matrix)
+            if (self.total_capacity <= 0) | (self.total_required <= 0) | (total_value <= 0):
+                return
             if np.sum(self.move_value_matrix, axis=0)[target_id] == 0:
                 continue
             discount_ratio = self.distance_discount_matr[:, target_id] * self.troops_ratio_matr[:, target_id]
@@ -175,8 +178,7 @@ class Player:
                         return
             else:
                 pass
-            if (self.total_capacity <= 0) | (self.total_required <= 0) | (total_value <= 0):
-                return
+
 
     def select_increments(self):
         if self.total_capacity < 10:
