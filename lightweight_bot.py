@@ -1,3 +1,4 @@
+import sys
 import numpy as np
 from collections import defaultdict
 from time import time
@@ -87,6 +88,14 @@ class Player:
         nearby_enemy = self.state.factories[enemy_factories_nearby, TROOPS]
         return sum(nearby_enemy * factory_discount)
 
+    def _available_troops(self, factory_id: int):
+        if self.state.factories[factory_id, PLAYER] != self.player_id:
+            return 0.
+        else:
+            factory_cost, troop_cost = self._stationing_troops_cost(factory_id), self._moving_troops_cost(factory_id)
+            troops = self.state.factories[factory_id, TROOPS]
+            available_troops = troops - factory_cost - troop_cost
+            return available_troops * (available_troops > 0)
 
     def _compute_factories_value(self):
         prod = self.state.factories[:, PROD]
@@ -97,34 +106,30 @@ class Player:
         troops = self.state.factories[factory_id, TROOPS]
         troop_cost, factory_cost = self._moving_troops_cost(factory_id), self._stationing_troops_cost(factory_id)
         if player == self.player_id:
-            required_to_take = troop_cost + factory_cost
+            required_to_take = troop_cost + factory_cost - troops
         elif player == -self.player_id:
-            required_to_take = troop_cost + factory_cost + troops
+            required_to_take = troop_cost + factory_cost + troops + 1
         else:
             required_to_take = troop_cost + factory_cost + troops + 1
 
-        return required_to_take
+        return abs(required_to_take) * (required_to_take > 0)
 
     def _generate_value_matrices(self):
-        self.required_troops = np.array([self._required_troops(factory_id)
-                                         for factory_id in self.state.factories[:, ID]]).reshape(-1, 1)
-        self.available_troops = np.where(self.my_factories[:, None], self.state.factories[:, TROOPS, None]
-                                         - self.required_troops, 0)
+        self.required_troops = np.array([
+            [self._required_troops(factory_id) for factory_id in self.state.factories[:, ID]]]).T
+        self.required_troops = np.floor(self.required_troops)
+        self.total_required = sum(self.required_troops)
+        self.available_troops = np.array([
+            [self._available_troops(factory_id) for factory_id in self.state.factories[:, ID]]]).T
         self.available_troops = np.floor(abs(self.available_troops) * (self.available_troops > 0))
         self.total_capacity = sum(self.available_troops)
 
-        self.required_troops[self.my_factories] =\
-            abs(self.required_troops[self.my_factories] - self.state.factories[self.my_factories, TROOPS].reshape(-1, 1)) * \
-               (self.required_troops[self.my_factories] > self.state.factories[self.my_factories, TROOPS].reshape(-1, 1))
-        self.required_troops = np.floor(self.required_troops)
-
-        self.required_move = np.dot(self.required_troops > 0, np.ones((1, self.state.factory_count))).T
-        self.troops_ratio_matr = np.dot(self.available_troops, 1./(self.required_troops.T + 1e-6))
-        #self.troops_ratio_matr = np.nan_to_num(self.troops_ratio_matr)
+        factory_all_one = np.ones((1, self.state.factory_count))
+        self.required_move = np.dot(self.required_troops > 0, factory_all_one).T
+        self.troops_ratio_matr = np.dot(self.available_troops, 1./(self.required_troops.T + 1e-6)) * self.required_move
 
         # DOES NOT CHANGE AFTER MOVE
-        self.factory_value_matr = np.dot(self._compute_factories_value().reshape(-1, 1),
-                                         np.ones((1, self.state.factory_count))).T
+        self.factory_value_matr = np.dot(self._compute_factories_value().reshape(-1, 1), factory_all_one).T
         self.distance_discount_matr = np.power(np.array(self.moving_troop_discount),
                                                np.maximum(self.state.distance_matrix-1, 0))
 
@@ -150,28 +155,35 @@ class Player:
                 while total_discount_ratio < 1:
                     source_id = ordered_sources[k]
                     n_cyborgs = int((1./discount_ratio[source_id]) * self.available_troops[source_id])
+                   #if n_cyborgs == 0:
+                        #continue
                     self.action_list.append(f"MOVE {source_id} {target_id} {n_cyborgs}")
                     total_discount_ratio += discount_ratio[source_id]
                     k += 1
                     self.total_capacity -= n_cyborgs
+                    self.total_required -= n_cyborgs
                     self.available_troops[source_id] -= n_cyborgs
                     self.available_troops = np.floor(self.available_troops)
                     self.required_troops[target_id] -= n_cyborgs
-                    self.required_troops = np.floor(self.required_troops)
+                    self.required_troops = np.floor(self.required_troops) * (self.required_troops > 0)
                     self.required_move = np.dot(self.required_troops > 0, np.ones((1, self.state.factory_count))).T
                     self.move_value_matrix /= self.troops_ratio_matr + 1e-6
-                    self.troops_ratio_matr *= np.dot(self.available_troops, 1. /(self.required_troops + 1e-6).T)
+                    self.troops_ratio_matr *= np.dot(self.available_troops, 1. / (self.required_troops + 1e-6).T)
                     self.move_value_matrix *= self.troops_ratio_matr * self.required_move
+                    total_value = np.sum(self.move_value_matrix)
+                    if (self.total_capacity <= 0) | (self.total_required <= 0) | (total_value <= 0):
+                        return
             else:
                 pass
-            if self.total_capacity <= 0:
-                break
+            if (self.total_capacity <= 0) | (self.total_required <= 0) | (total_value <= 0):
+                return
 
     def select_increments(self):
         if self.total_capacity < 10:
             return
         for source_id, available in enumerate(self.available_troops):
-            if (available > 10) & (self.state.factories[source_id, PROD]<3):
+            if (available > 10) & (self.state.factories[source_id, PROD] < 3):
+                print(f"FACTORY {source_id} {available} {self.state.factories[source_id, TROOPS]}", file=sys.stderr)
                 self.action_list.append(f"INC {source_id}")
 
     def select_plan(self):
@@ -182,7 +194,7 @@ class Player:
             self.action_list.append("WAIT")
 
     def execute_plan(self):
-        #print(f"{plan}", file=sys.stderr, flush=True)
+        print(f"{self.action_list}", file=sys.stderr, flush=True)
         print(";".join(self.action_list))
 
     def reset(self):

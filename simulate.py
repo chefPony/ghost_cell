@@ -11,7 +11,7 @@ import numpy as np
 from scenario_generator import ScenarioGenerator
 from constants import MIN_FACTORY_COUNT, MAX_FACTORY_COUNT
 
-PARALLEL = True
+PARALLEL = False
 NUM_CPU = psutil.cpu_count(logical = False)
 
 parser = argparse.ArgumentParser(description='Simulate ghost in the cell game')
@@ -33,9 +33,9 @@ class Simulator:
         else:
             p0 = Popen(["./"+self.player_1], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=-1)
         if self.player_2.endswith(".py"):
-            p1 = Popen(['python', self.player_2], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=-1)
+            p1 = Popen(['python', self.player_2], stdout=PIPE, stdin=PIPE, stderr=sys.stderr, shell=False, text=True, bufsize=-1)
         else:
-            p1 = Popen(["./" + self.player_2], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=-1)
+            p1 = Popen(["./" + self.player_2], stdout=PIPE, stdin=PIPE, stderr=sys.stderr, shell=False, text=True, bufsize=-1)
 
         scenario = ScenarioGenerator.generate(factory_count=factory_count)
         if int(time()*1e4) % 2 == 0:

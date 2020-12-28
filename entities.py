@@ -1,3 +1,5 @@
+from exception import InvalidAction
+
 class Entity:
 
     def __init__(self, entity_id, player):
@@ -48,9 +50,9 @@ class Factory(Entity):
 
     def increment_prod(self):
         if self.prod == 3:
-            raise ValueError(f"Factory {self.entity_id} cannot increment production, already 3")
+            raise InvalidAction(f"Factory {self.entity_id} cannot increment production, already 3")
         elif self.troops < 10:
-            raise ValueError(f"Factory {self.entity_id}  has not enough troop for upgrade: {self.troops}, required 10")
+            raise InvalidAction(f"Factory {self.entity_id}  has not enough troop for upgrade: {self.troops}, required 10")
         else:
             self.prod += 1
             self.troops -= 10
