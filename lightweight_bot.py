@@ -174,155 +174,100 @@ class GameState:
             elif entity_type == "BOMB":
                 self.update_bomb(entity_id, player=arg_1, source=arg_2, destination=arg_3, distance=arg_4)
 
-
-def evaluate_inc(source, game):
-    discount = np.array([0.9 ** i for i in range(5)])
-    source_player, source_prod = game.factories[source, PLAYER], game.factories[source, PROD]
-    source_troops, source_incoming = game.factories[source, TROOPS], game.troops[source, :, :]
-    enemy_source_incoming = source_incoming[:5, PLAYER_MAP[-1]]
-    ally_source_incoming = source_incoming[:5, PLAYER_MAP[1]]
-
-    available_troops = max(sum(source_prod * discount) + source_troops + sum(ally_source_incoming)
-                           - sum(enemy_source_incoming), 0)
-    available_troops = min(available_troops, source_troops)
-
-    roi = (source_prod + 1) / 10. * (available_troops > 10.)
-    return roi
-
-def evaluate_move(source, destination, game):
-
-    discount = np.array([0.9 ** i for i in range(5)])
-    distance = game.distance_matrix[source, destination]
-
-    source_player, source_prod = game.factories[source, PLAYER], game.factories[source, PROD]
-    source_troops, source_incoming = game.factories[source, TROOPS], game.troops[source, :, :]
-    enemy_source_incoming = source_incoming[:5, PLAYER_MAP[-1]]
-    ally_source_incoming = source_incoming[:5, PLAYER_MAP[1]]
-
-    target_player, target_prod = game.factories[destination, PLAYER], game.factories[destination, PROD]
-    target_troops, target_incoming = game.factories[destination, TROOPS], game.troops[destination, :, :]
-    enemy_target_incoming = target_incoming[:distance+1, PLAYER_MAP[-1]]
-    ally_target_incoming = target_incoming[:distance+1, PLAYER_MAP[1]]
-
-    available_troops = max(sum(source_prod * discount) + source_troops + sum(ally_source_incoming)
-                           - sum(enemy_source_incoming), 0)
-    available_troops = min(available_troops, source_troops)
-
-    gain = target_prod + 0.1
-    if target_player == 1:
-        required_troops = max(sum(enemy_target_incoming) - sum(ally_target_incoming) - target_troops, 0)
-        roi = gain/(required_troops + 1e-5) * (required_troops > 0) - distance * 1e-2
-    elif target_player == 0:
-        required_troops = max(target_troops + sum(enemy_target_incoming) - sum(ally_target_incoming) + 1
-                              , 0)
-        roi = gain/(required_troops + 1e-5) * (required_troops > 0) - distance * 5e-2
-    elif target_player == -1:
-        required_troops = max(target_troops + sum(enemy_target_incoming) + target_prod * distance
-                              - sum(ally_target_incoming) + 1, 0)
-        roi = gain/(required_troops + 1e-5) * (required_troops > 0) - distance * 5e-2
-    return min(required_troops, available_troops), roi * (available_troops>required_troops)
-
-
 class Player:
 
-    def __init__(self, player_id: int, distance_threshold: int, distance_discount: float):
+    def __init__(self, player_id: int, moving_troop_dist_th: int, moving_troop_discount: float,
+                 stationing_troop_dist_th: int, stationing_troop_discount: float):
         self.player_id = player_id
-        self.distance_threshold = distance_threshold
-        self.distance_discount = distance_discount
+        self.moving_troop_dist_th = moving_troop_dist_th
+        self.moving_troop_discount = moving_troop_discount
+        self.stationing_troop_dist_th = stationing_troop_dist_th
+        self.stationing_troop_discount = stationing_troop_discount
         self.state = None
 
     def get_state(self, game_state: GameState):
         self.state = game_state
         self.my_factories = self.state.factories[:, PLAYER] == self.player_id
+        self.moving_troop_dist_th = min(self.moving_troop_dist_th, self.state.max_distance)
+        self.stationing_troop_dist_th = min(self.stationing_troop_dist_th, self.state.max_distance)
 
-    def _compute_required_troops_ally(self, factory_id: int):
+    def _moving_troops_cost(self, factory_id: int):
+        troop_discount = np.array([self.moving_troop_discount ** i for i in range(self.moving_troop_dist_th + 1)])
+        incoming_enemy = self.state.troops[factory_id, :self.moving_troop_dist_th + 1, PLAYER_MAP[-self.player_id]]
+        incoming_ally = self.state.troops[factory_id, :self.moving_troop_dist_th + 1, PLAYER_MAP[self.player_id]]
+        return sum((incoming_enemy - incoming_ally) * troop_discount)
 
-        troop_discount = np.array([self.distance_discount ** i for i in range(self.distance_threshold + 1)])
-        incoming_enemy = self.state.troops[factory_id, :self.distance_threshold + 1, PLAYER_MAP[-self.player_id]]
-        incoming_ally = self.state.troops[factory_id, :self.distance_threshold + 1, PLAYER_MAP[self.player_id]]
+    def _stationing_troops_cost(self, factory_id: int):
+        enemy_factories_nearby = (self.state.factories[:, PLAYER] == -self.player_id) & \
+                                 (self.state.factories[:, ID] != factory_id) &\
+                                 (self.state.distance_matrix[factory_id, :] <= self.stationing_troop_dist_th)
+        factory_discount = [self.stationing_troop_discount ** max(d, 0)
+                            for d in self.state.distance_matrix[factory_id, enemy_factories_nearby]]
 
-        enemy_factories = self.state.factories[:, PLAYER] == -self.player_id
-        factory_discount = [self.distance_discount ** (d - 1) for d in self.state.distance_matrix[factory_id, enemy_factories]]
-        nearby_enemy = self.state.factories[enemy_factories, TROOPS]
+        nearby_enemy = self.state.factories[enemy_factories_nearby, TROOPS]
+        return sum(nearby_enemy * factory_discount)
 
-        required_defense = (incoming_enemy - incoming_ally) * troop_discount + sum(nearby_enemy * factory_discount)
-        return required_defense
 
-    def _compute_required_troops_enemy(self, factory_id: int):
-        troops = self.state.factories[factory_id, TROOPS]
-
-        troop_discount = np.array([self.distance_discount ** i for i in range(self.distance_threshold + 1)])
-        incoming_enemy = self.state.troops[factory_id, :self.distance_threshold + 1, PLAYER_MAP[-self.player_id]]
-        incoming_ally = self.state.troops[factory_id, :self.distance_threshold + 1, PLAYER_MAP[self.player_id]]
-
-        enemy_factories = self.state.factories[:, PLAYER] == -self.player_id
-        factory_discount = [self.distance_discount ** (d - 1) for d in
-                            self.state.distance_matrix[factory_id, enemy_factories]]
-        nearby_enemy = self.state.factories[enemy_factories, TROOPS]
-
-        required_to_take = troops + (incoming_enemy - incoming_ally) * troop_discount + sum(nearby_enemy * factory_discount)
-        return required_to_take
-
-    def _compute_required_troops_neutral(self, factory_id: int):
-        troops = self.state.factories[factory_id, TROOPS]
-
-        troop_discount = np.array([self.distance_discount ** i for i in range(self.distance_threshold + 1)])
-        incoming_enemy = self.state.troops[factory_id, :self.distance_threshold + 1, PLAYER_MAP[-self.player_id]]
-        incoming_ally = self.state.troops[factory_id, :self.distance_threshold + 1, PLAYER_MAP[self.player_id]]
-
-        enemy_factories = self.state.factories[:, PLAYER] == -self.player_id
-        factory_discount = [self.distance_discount ** (d - 1) for d in
-                            self.state.distance_matrix[factory_id, enemy_factories]]
-        nearby_enemy = self.state.factories[enemy_factories, TROOPS]
-
-        required_to_take = troops + (incoming_enemy - incoming_ally) * troop_discount + sum(
-            nearby_enemy * factory_discount)
-        return required_to_take
+    def _compute_factories_value(self):
+        prod = self.state.factories[:, PROD]
+        return prod + 0.1
 
     def _required_troops(self, factory_id):
         player = self.state.factories[factory_id, PLAYER]
-
+        troops = self.state.factories[factory_id, TROOPS]
+        troop_cost, factory_cost = self._moving_troops_cost(factory_id), self._stationing_troops_cost(factory_id)
         if player == self.player_id:
-            required_to_take = self._compute_required_troops_ally(factory_id)
+            required_to_take = troop_cost + factory_cost
         elif player == -self.player_id:
-            required_to_take = self._compute_required_troops_enemy(factory_id)
+            required_to_take = troop_cost + factory_cost + troops
         else:
-            required_to_take = self._compute_required_troops_neutral(factory_id)
+            required_to_take = troop_cost + factory_cost + troops + 1
 
         return required_to_take
 
     def _move_value_matrix(self):
-        self.required_troops = np.array([self._required_troops(factory_id) for factory_id in self.state.factories[:, ID]])
-        self.available_troops = np.where(self.my_factories, max(self.state.factories[:, TROOPS] - self.required_troops, 0), 0)
+        self.required_troops = np.array([self._required_troops(factory_id)
+                                         for factory_id in self.state.factories[:, ID]])
+        self.available_troops = np.where(self.my_factories,
+                                         np.max(self.state.factories[:, TROOPS] - self.required_troops, 0), 0)
         self.total_capacity = sum(self.available_troops)
-        self.required_troops[self.my_factories] = max(self.required_troops[self.my_factories] -
-                                                      self.state.factories[self.my_factories, TROOPS], 0)
-        self.troops_ratio_matr = np.tensordot(self.available_troops, self.required_troops)
-        self.gain_matr = np.tensordot(self.state.factories[:, PROD], np.ones((self.state.factory_count,))).T
-        self.distance_discount_matr = np.power(np.array(self.distance_discount), self.state.distance_matrix-1)
-        self.move_value_matrix = self.gain_matr * self.distance_discount_matr * self.troops_ratio_matr
+        self.required_troops[self.my_factories] =\
+            abs(self.required_troops[self.my_factories] - self.state.factories[self.my_factories, TROOPS]) * \
+               (self.required_troops[self.my_factories] > self.state.factories[self.my_factories, TROOPS])
+
+        self.troops_ratio_matr = np.dot(self.available_troops.reshape(-1, 1),
+                                        1./(self.required_troops.reshape(1, -1) + 1e-6))
+        self.troops_ratio_matr[self.my_factories, self.my_factories] *= self.required_troops[self.my_factories] > 0
+
+        self.factory_value_matr = np.dot(self._compute_factories_value().reshape(-1, 1),
+                                         np.ones((1, self.state.factory_count))).T
+        self.distance_discount_matr = np.power(np.array(self.moving_troop_discount),
+                                               np.maximum(self.state.distance_matrix-1, 0))
+        self.move_value_matrix = self.factory_value_matr * self.distance_discount_matr * self.troops_ratio_matr
 
     def execute_plan(self, plan):
         print(f"{plan}", file=sys.stderr, flush=True)
         print(";".join(plan))
 
 
-game = GameState()
-game.initialize(input)
-agent = Player(player_id=1, distance_threshold=5, distance_discount=0.9)
-# game loop
-while True:
-    start = time()
-    game.current_status(input)
-    agent.get_state(game)
-    # Write an action using print
-    # To debug: print("Debug messages...", file=sys.stderr, flush=True)
-    # Any valid action, such as "WAIT" or "MOVE source destination cyborgs"
-    start_plan = time()
-    action_plan = agent.get_plan(game, time_limit=35)
-    if len(action_plan) == 0:
-        print("WAIT")
-    else:
-        agent.execute_plan(action_plan)
-    game.troops[:, :, :] = 0
+if __name__ == "__main__":
+    game = GameState()
+    game.initialize(input)
+    agent = Player(player_id=1, moving_troop_dist_th=20, moving_troop_discount=0.9, stationing_troop_dist_th=3,
+                   stationing_troop_discount=0.7)
+    # game loop
+    while True:
+        start = time()
+        game.current_status(input)
+        agent.get_state(game)
+        # Write an action using print
+        # To debug: print("Debug messages...", file=sys.stderr, flush=True)
+        # Any valid action, such as "WAIT" or "MOVE source destination cyborgs"
+        start_plan = time()
+        action_plan = agent.get_plan(game, time_limit=35)
+        if len(action_plan) == 0:
+            print("WAIT")
+        else:
+            agent.execute_plan(action_plan)
+        game.troops[:, :, :] = 0
 
