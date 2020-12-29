@@ -170,8 +170,8 @@ class Player:
                     self.required_troops[target_id] -= n_cyborgs
                     self.required_troops = np.floor(self.required_troops) * (self.required_troops > 0)
                     self.required_move = np.dot(self.required_troops > 0, np.ones((1, self.state.factory_count))).T
-                    self.move_value_matrix /= self.troops_ratio_matr + 1e-6
-                    self.troops_ratio_matr *= np.dot(self.available_troops, 1. / (self.required_troops + 1e-6).T)
+                    self.move_value_matrix /= (self.troops_ratio_matr + 1e-6)
+                    self.troops_ratio_matr = np.dot(self.available_troops, 1. / (self.required_troops + 1e-6).T)
                     self.move_value_matrix *= self.troops_ratio_matr * self.required_move
                     total_value = np.sum(self.move_value_matrix)
                     if (self.total_capacity <= 0) | (self.total_required <= 0) | (total_value <= 0):
