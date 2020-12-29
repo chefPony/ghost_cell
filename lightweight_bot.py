@@ -104,7 +104,7 @@ class Player:
         enemy_factories = self.state.factories[:, PLAYER] == -self.player_id
         if any(enemy_factories):
             min_dist = np.min(self.state.distance_matrix[:, enemy_factories], axis=1) + 1
-            coef = self.factory_value_penalty - np.power(np.array([self.factory_value_penalty]), min_dist + 1) / \
+            coef = (self.factory_value_penalty - np.power(np.array([self.factory_value_penalty]), min_dist + 1)) / \
                    (1 - self.factory_value_penalty)
         else:
             coef = 1
