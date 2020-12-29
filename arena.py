@@ -141,7 +141,7 @@ class Scenario:
                 start = time()
                 action_plan = read_from_stdout(bot, TIMEOUT_MOVE)
             except TimeoutError:
-                print(f"Player {player} did not answer in time |{(time() - start) * 1e3}ms")
+                print(f"Player {player} did not answer in time |{(time() - start) * 1e3}ms", file=sys.stderr)
                 self.winner = -1 * player
                 self.win_condition = "timeout"
                 return

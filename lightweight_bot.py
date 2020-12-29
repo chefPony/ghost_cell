@@ -194,7 +194,7 @@ class Player:
             return
         for source_id, available in enumerate(self.available_troops):
             if (available > 10) & (self.state.factories[source_id, PROD] < 3):
-                print(f"FACTORY {source_id} {available} {self.state.factories[source_id, TROOPS]}", file=sys.stderr)
+                #print(f"FACTORY {source_id} {available} {self.state.factories[source_id, TROOPS]}", file=sys.stderr)
                 self.action_list.append(f"INC {source_id}")
 
     def select_plan(self):
@@ -205,7 +205,7 @@ class Player:
             self.action_list.append("WAIT")
 
     def execute_plan(self):
-        print(f"{self.action_list}", file=sys.stderr, flush=True)
+        #print(f"{self.action_list}", file=sys.stderr, flush=True)
         print(";".join(self.action_list))
 
     def reset(self):
@@ -215,7 +215,7 @@ class Player:
 if __name__ == "__main__":
     game = GameState()
     game.initialize(input)
-    agent = Player(player_id=1, moving_troop_dist_th=20, moving_troop_discount=0.9, stationing_troop_dist_th=3,
+    agent = Player(player_id=1, moving_troop_dist_th=100, moving_troop_discount=0.95, stationing_troop_dist_th=100,
                    stationing_troop_discount=0.7)
     # game loop
     while True:

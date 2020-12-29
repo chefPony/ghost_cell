@@ -306,7 +306,7 @@ class Player:
         return plan
 
     def execute_plan(self, plan):
-        print(f"{plan}", file=sys.stderr, flush=True)
+        #print(f"{plan}", file=sys.stderr, flush=True)
         print(";".join(plan))
 
 
