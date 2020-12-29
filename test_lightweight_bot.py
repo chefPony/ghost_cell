@@ -148,17 +148,17 @@ class MyTestCase(unittest.TestCase):
         state = self.create_square_state(d=6, player=[1, 0, 0, -1], troops=[10, 5, 5, 10], prod=[1, 0, 0, 1], blocked=0)
         player = Player(player_id=1, moving_troop_dist_th=100, moving_troop_discount=0.9, stationing_troop_dist_th=100,
                         stationing_troop_discount=0.7)
-        player.get_state(game_state=state)
+        player._update_from_state(game_state=state)
         player.select_plan()
         self.assertSequenceEqual(player.action_list, ["WAIT"])
-        #print(player.required_troops, "\n")
+        #print(player.troops_required, "\n")
         #print(player.move_value_matrix)
 
     def test_double_attack(self):
         state = self.create_square_state(d=3, player=[1, 1, 1, -1], troops=[1, 16, 16, 10], prod=[1, 0, 0, 1], blocked=0)
         player = Player(player_id=1, moving_troop_dist_th=100, moving_troop_discount=0.9, stationing_troop_dist_th=100,
                         stationing_troop_discount=0.7)
-        player.get_state(game_state=state)
+        player._update_from_state(game_state=state)
         player.select_plan()
         print(player.action_list)
 
@@ -166,7 +166,7 @@ class MyTestCase(unittest.TestCase):
         state = self.create_hard_choice_1()
         player = Player(player_id=1, moving_troop_dist_th=100, moving_troop_discount=0.9, stationing_troop_dist_th=100,
                         stationing_troop_discount=0.7)
-        player.get_state(game_state=state)
+        player._update_from_state(game_state=state)
         player.select_plan()
         self.assertSequenceEqual(["MOVE 0 2 4", "MOVE 0 1 13"], player.action_list)
 
@@ -174,7 +174,7 @@ class MyTestCase(unittest.TestCase):
         state = self.create_hard_choice_2()
         player = Player(player_id=1, moving_troop_dist_th=100, moving_troop_discount=0.9, stationing_troop_dist_th=100,
                         stationing_troop_discount=0.7)
-        player.get_state(game_state=state)
+        player._update_from_state(game_state=state)
         player.select_plan()
         print(state.factories[:,[ID, TROOPS, PROD]])
         print(player.action_list)
@@ -184,7 +184,7 @@ class MyTestCase(unittest.TestCase):
         state = self.create_complex_scenario()
         player = Player(player_id=1, moving_troop_dist_th=100, moving_troop_discount=0.95, stationing_troop_dist_th=100,
                         stationing_troop_discount=0.7)
-        player.get_state(game_state=state)
+        player._update_from_state(game_state=state)
         player.select_plan()
         print(state.factories[:,[ID, TROOPS, PROD]])
         print(player.action_list)
@@ -193,14 +193,14 @@ class MyTestCase(unittest.TestCase):
         state = self.create_duel(d=2, player=[1, -1], troops=[10, 10], prod=[1, 1], blocked=0)
         player = Player(player_id=1, moving_troop_dist_th=100, moving_troop_discount=0.9, stationing_troop_dist_th=100,
                         stationing_troop_discount=0.7)
-        player.get_state(game_state=state)
+        player._update_from_state(game_state=state)
         player.select_plan()
         self.assertSequenceEqual(player.action_list, ["WAIT"])
 
         state = self.create_duel(d=2, player=[1, -1], troops=[15, 10], prod=[1, 1], blocked=0)
         player = Player(player_id=1, moving_troop_dist_th=100, moving_troop_discount=0.9, stationing_troop_dist_th=100,
                         stationing_troop_discount=0.8)
-        player.get_state(game_state=state)
+        player._update_from_state(game_state=state)
         player.select_plan()
         self.assertSequenceEqual(player.action_list, ["WAIT"])
 
