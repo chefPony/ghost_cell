@@ -57,12 +57,13 @@ class GameState:
 class Player:
 
     def __init__(self, player_id: int, moving_troop_dist_th: int, moving_troop_discount: float,
-                 stationing_troop_dist_th: int, stationing_troop_discount: float):
+                 stationing_troop_dist_th: int, stationing_troop_discount: float, factory_value_penalty=0.9):
         self.player_id = player_id
         self.moving_troop_dist_th = moving_troop_dist_th
         self.moving_troop_discount = moving_troop_discount
         self.stationing_troop_dist_th = stationing_troop_dist_th
         self.stationing_troop_discount = stationing_troop_discount
+        self.factory_value_penalty = factory_value_penalty
         self.state = None
         self.action_list = list()
 
@@ -71,6 +72,7 @@ class Player:
         self.my_factories = self.state.factories[:, PLAYER] == self.player_id
         self.moving_troop_dist_th = min(self.moving_troop_dist_th, self.state.max_distance)
         self.stationing_troop_dist_th = min(self.stationing_troop_dist_th, self.state.max_distance)
+        self.total_prod = sum(game_state.factories[self.my_factories, PROD])
 
     def _moving_troops_cost(self, factory_id: int):
         troop_discount = np.array([self.moving_troop_discount ** i for i in range(self.moving_troop_dist_th + 1)])
@@ -99,6 +101,13 @@ class Player:
 
     def _compute_factories_value(self):
         prod = self.state.factories[:, PROD]
+        enemy_factories = self.state.factories[:, PLAYER] == -self.player_id
+        if any(enemy_factories):
+            min_dist = np.min(self.state.distance_matrix[:, enemy_factories], axis=1) + 1
+            coef = self.factory_value_penalty - np.power(np.array([self.factory_value_penalty]), min_dist + 1) / \
+                   (1 - self.factory_value_penalty)
+        else:
+            coef = 1
         return prod + 0.1
 
     def _required_troops(self, factory_id):
