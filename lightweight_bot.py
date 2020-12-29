@@ -96,7 +96,7 @@ class Player:
         else:
             factory_cost, troop_cost = self._stationing_troops_cost(factory_id), self._moving_troops_cost(factory_id)
             troops = self.state.factories[factory_id, TROOPS]
-            available_troops = troops - factory_cost - troop_cost
+            available_troops = troops - factory_cost - max(troop_cost, 0)
             return available_troops * (available_troops > 0)
 
     def _compute_factories_value(self):
@@ -194,7 +194,9 @@ class Player:
             return
         for source_id, available in enumerate(self.available_troops):
             if (available > 10) & (self.state.factories[source_id, PROD] < 3):
-                #print(f"FACTORY {source_id} {available} {self.state.factories[source_id, TROOPS]}", file=sys.stderr)
+                #print(f" FACTORY {self.state.factories}", file=sys.stderr)
+                #print(f" AVAILABLE {self.available_troops}", file=sys.stderr)
+                #print(f" INC FACTORY {source_id} {available} {self.state.factories[source_id, TROOPS]}", file=sys.stderr)
                 self.action_list.append(f"INC {source_id}")
 
     def select_plan(self):

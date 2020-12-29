@@ -4,6 +4,7 @@ import argparse
 import multiprocessing as mp
 import psutil
 import sys
+import pickle
 
 import pandas as pd
 import numpy as np
@@ -28,29 +29,29 @@ class Simulator:
 
     def simulate(self, factory_count):
         if self.player_1.endswith(".py"):
-            p0 = Popen(["python", self.player_1], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True,
+            p0 = Popen(["python", self.player_1], stdout=PIPE, stdin=PIPE, stderr=sys.stderr, shell=False, text=True,
                        bufsize=-1)
         else:
-            p0 = Popen(["./"+self.player_1], stdout=PIPE, stdin=PIPE, stderr=PIPE, shell=False, text=True, bufsize=-1)
+            p0 = Popen(["./"+self.player_1], stdout=PIPE, stdin=PIPE, stderr=sys.stderr, shell=False, text=True, bufsize=-1)
         if self.player_2.endswith(".py"):
             p1 = Popen(['python', self.player_2], stdout=PIPE, stdin=PIPE, stderr=sys.stderr, shell=False, text=True, bufsize=-1)
         else:
             p1 = Popen(["./" + self.player_2], stdout=PIPE, stdin=PIPE, stderr=sys.stderr, shell=False, text=True, bufsize=-1)
 
-        scenario = ScenarioGenerator.generate(factory_count=factory_count)
+        self.scenario = ScenarioGenerator.generate(factory_count=factory_count)
         if int(time()*1e4) % 2 == 0:
-            scenario.players = {1: p0, -1: p1}
+            self.scenario.players = {1: p0, -1: p1}
             bot_player = {1: self.player_1, -1: self.player_2}
         else:
-            scenario.players = {-1: p0, 1: p1}
+            self.scenario.players = {-1: p0, 1: p1}
             bot_player = {-1: self.player_1, 1: self.player_2}
         start_game = time()
-        scenario.match()
-        print(f"Winner is {bot_player.get(scenario.winner, None)} by {scenario.win_condition} in "
+        self.scenario.match()
+        print(f"Winner is {bot_player.get(self.scenario.winner, 'draw')} by {self.scenario.win_condition} in "
               f"{np.around(time()-start_game, 2)}s", file=sys.stderr)
-        result = {"win": bot_player[scenario.winner], "win_condition": scenario.win_condition,
-                  "turn": scenario.turn, "factory_count": factory_count, "as_player": scenario.winner,
-                  "final_score": " ".join([f"{player}|{score} " for player, score in scenario.score.items()]),
+        result = {"win": bot_player.get(self.scenario.winner, 'draw'), "win_condition": self.scenario.win_condition,
+                  "turn": self.scenario.turn, "factory_count": factory_count, "as_player": self.scenario.winner,
+                  "final_score": " ".join([f"{player}|{score} " for player, score in self.scenario.score.items()]),
                   "playing_time": time() - start_game}
 
         p0.kill(), p1.kill()
@@ -73,6 +74,9 @@ def main():
     else:
         for n_factory in factory_counts:
             r = simulator.simulate(factory_count=n_factory)
+            #if r["win_condition"] == "invalid action":
+            #    print(simulator.scenario.input[-simulator.scenario.winner], file=sys.stderr)
+            #    break
             records.append(r)
 
     stat = pd.DataFrame.from_records(records)
