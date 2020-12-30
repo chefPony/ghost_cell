@@ -165,17 +165,32 @@ class Player:
 
         return abs(required_to_take) * (required_to_take > 0)
 
-    def _compute_factories_value(self):
-        prod = self.state.factories[:, PROD]
-        to_consider_ally = (self.state.factories[:, ID] != self.state.factories[:, ID, None]) & self.my_factories
-        to_consider_enemy = (self.state.factories[:, ID] != self.state.factories[:, ID, None]) & self.enemy_factories
-        n_vec_ally = np.sum(to_consider_ally, axis=1, dtype=int)
-        mean_distance_ally = np.sum(self.state.distance_matrix * to_consider_ally, axis=1)/(n_vec_ally + 1e-5)
-        mean_distance_ally = mean_distance_ally + (n_vec_ally < 1)
-        n_vec_enemy = np.sum(to_consider_enemy, axis=1, dtype=int)
-        mean_distance_enemy = np.sum(self.state.distance_matrix * to_consider_enemy, axis=1)/(n_vec_enemy + 1e-5)
-        mean_distance_enemy = mean_distance_enemy + (n_vec_enemy < 1)
-        return (prod * 10 + 1) * mean_distance_enemy/mean_distance_ally
+    def _factory_value(self, factory_id, k=3):
+        prod = self.state.factories[factory_id, PROD]
+        k_neighbors = min(k, sum(self.my_factories), sum(self.enemy_factories))
+        k_ally, k_enemy = 0, 0
+        sum_distance_ally, sum_distance_enemy = 0, 0
+        for fid in np.argsort(self.state.distance_matrix[factory_id, :]):
+            if fid == factory_id:
+                continue
+            elif (k_ally == k_neighbors) & (k_enemy == k_neighbors):
+                break
+            elif self.my_factories[fid] & (k_ally < k_neighbors):
+                sum_distance_ally += self.state.distance_matrix[factory_id, fid]
+                k_ally += 1
+            elif self.enemy_factories[fid] & (k_enemy < k_neighbors):
+                sum_distance_enemy += self.state.distance_matrix[factory_id, fid]
+                k_enemy += 1
+        if (sum_distance_ally > 0) & (sum_distance_enemy > 0):
+            ratio = (sum_distance_enemy/sum_distance_ally)
+        else:
+            ratio = 1
+        return (prod + 1) * ratio
+
+    def _compute_value(self):
+        value = np.array([self._factory_value(fid, 3) for fid in self.state.factories[:, ID]])
+        #print(value, file=sys.stderr)
+        return value
 
     def predict_bomb(self):
         fids = self.state.factories[self.my_factories, ID]
@@ -211,18 +226,19 @@ class Player:
                         break
 
             # EVACUATE FACTORY
-            if (bomb['player'] == -self.player_id) & (self.bomb_state[bomb_id]["countdown"] == 2):
+            if (bomb['player'] == -self.player_id) & (self.bomb_state[bomb_id]["countdown"] == 1):
                 evacuate = self.bomb_state[bomb_id]["destination"]
                 troops = self.state.factories[evacuate, TROOPS]
+                prod = self.state.factories[evacuate, PROD]
                 refugee = np.argsort(self.state.distance_matrix[evacuate, :])
                 for fid in refugee:
                     if self.my_factories[fid] & (fid != evacuate):
-                        self.action_list.append(f"MOVE {evacuate} {fid} {troops}")
+                        self.action_list.append(f"MOVE {evacuate} {fid} {troops + prod}")
                         break
 
 
     def select_move(self):
-        target_value = self._compute_factories_value()
+        target_value = self._compute_value()
         #print(f"{[(fid, target_value[fid]) for fid in self.state.factories[:, ID]]}", file=sys.stderr)
         max_required_target = np.max(self.troops_required_matrix, axis=0)
         ordered_targets = np.array(list(reversed(np.argsort(target_value))))
@@ -274,7 +290,7 @@ class Player:
 if __name__ == "__main__":
     game = GameState()
     game.initialize(input)
-    agent = Player(player_id=1, moving_troop_dist_th=100, moving_troop_discount=0.99, stationing_troop_dist_th=100,
+    agent = Player(player_id=1, moving_troop_dist_th=100, moving_troop_discount=1, stationing_troop_dist_th=100,
                    stationing_troop_discount=0.7)
     # game loop
     while True:
@@ -289,5 +305,3 @@ if __name__ == "__main__":
         agent.execute_plan()
         agent.reset()
         game.reset()
-
-
