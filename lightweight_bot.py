@@ -21,7 +21,7 @@ class GameState:
         self.max_distance = np.max(self.distance_matrix)
         self.factories = np.zeros((self.factory_count, 6), dtype=int)
         self.troops = np.zeros((self.factory_count, self.max_distance + 1, 2), dtype=int)
-        self.bombs = defaultdict(list)
+        self.bombs = dict()
 
     def update_factory(self, entity_id, player, troops, prod, blocked):
         self.factories[entity_id, ID] = entity_id
@@ -33,9 +33,9 @@ class GameState:
     def update_troop(self, entity_id, player, source, destination, troops, distance):
         self.troops[destination, distance, PLAYER_MAP[player]] += troops
 
-    def update_bomb(self, entity_id, player, source, destination, distance):
-        self.bombs[distance].append({"id": entity_id, "player": player, "source": source, "destination": destination,
-                                     "distance": distance})
+    def update_bomb(self, entity_id, player, source, destination, countdown):
+        self.bombs[entity_id] = {"id": entity_id, "player": player, "source": source, "destination": destination,
+                                 "countdown": countdown}
 
     def current_status(self, input):
         self.troops[:, :, :] = 0
@@ -51,7 +51,11 @@ class GameState:
                 self.update_troop(entity_id, player=arg_1, source=arg_2, destination=arg_3, troops=arg_4,
                                   distance=arg_5)
             elif entity_type == "BOMB":
-                self.update_bomb(entity_id, player=arg_1, source=arg_2, destination=arg_3, distance=arg_4)
+                self.update_bomb(entity_id, player=arg_1, source=arg_2, destination=arg_3, countdown=arg_4)
+
+    def reset(self):
+        self.troops[:, :, :] = 0
+        self.bombs = dict()
 
 
 class Player:
@@ -69,6 +73,7 @@ class Player:
         self.state = None
         self.my_factories, self.enemy_factories, self.total_prod = None, None, 0
         self.prod_penalty_matrix = None
+        self.bomb_state = dict()
 
     def _update_from_state(self, game_state: GameState):
         self.state = game_state
@@ -111,9 +116,9 @@ class Player:
         else:
             factory_cost, troop_cost = self._stationing_troops_cost(factory_id), self._moving_troops_cost(factory_id)
             troops = self.state.factories[factory_id, TROOPS]
-            prod = self.state.factories[factory_id, PROD]
-            blocked = self.state.factories[factory_id, BLOCKED]
-            available_troops = troops + prod * (blocked == 0) - factory_cost - max(troop_cost, 0)
+            #prod = self.state.factories[factory_id, PROD]
+            #blocked = self.state.factories[factory_id, BLOCKED]
+            available_troops = troops - factory_cost - max(troop_cost, 0)
             return available_troops * (available_troops > 0)
 
     def _compute_distance_penalty_matrix(self):
@@ -121,7 +126,7 @@ class Player:
                                                 np.maximum(self.state.distance_matrix-1, 0))
 
     def _compute_prod_penalty_matrix(self):
-        prod_vec = self.state.factories[:, PROD] * self.enemy_factories
+        prod_vec = self.state.factories[:, PROD] * (self.state.factories[:, BLOCKED] == 0) * self.enemy_factories
         self.prod_penalty_matrix = self.state.distance_matrix * prod_vec[None, :]
 
     def _compute_troops_required(self):
@@ -148,9 +153,11 @@ class Player:
     def _required_troops_factory(self, factory_id):
         player = self.state.factories[factory_id, PLAYER]
         troops = self.state.factories[factory_id, TROOPS]
+        prod = self.state.factories[factory_id, PROD]
+        block = self.state.factories[factory_id, BLOCKED]
         troop_cost, factory_cost = self._moving_troops_cost(factory_id), self._stationing_troops_cost(factory_id)
         if player == self.player_id:
-            required_to_take = troop_cost + factory_cost - troops
+            required_to_take = troop_cost + factory_cost - troops - (prod * block == 0)
         elif player == -self.player_id:
             required_to_take = troop_cost + factory_cost + troops + 1
         else:
@@ -170,12 +177,58 @@ class Player:
         mean_distance_enemy = mean_distance_enemy + (n_vec_enemy < 1)
         return (prod * 10 + 1) * mean_distance_enemy/mean_distance_ally
 
+    def predict_bomb(self):
+        fids = self.state.factories[self.my_factories, ID]
+        troops = self.state.factories[self.my_factories, TROOPS]
+        prod = self.state.factories[self.my_factories, PROD]
+        targets = [(fid, tr, pr) for fid,tr,pr in zip(fids, troops, prod)]
+        targets = list(sorted(targets, key=lambda x: (-x[1], -x[2])))
+
+        bomb_keys = list(self.bomb_state.keys())
+        for bid in bomb_keys:
+            if bid not in self.state.bombs.keys():
+                self.bomb_state.pop(bid)
+
+        for bomb_id, bomb in self.state.bombs.items():
+            source, destination, countdown = bomb["source"], bomb["destination"], bomb["countdown"]
+
+            if bomb_id not in self.bomb_state.keys():
+                self.bomb_state[bomb_id] = bomb
+                self.bomb_state[bomb_id]["turn_active"] = 1
+            else:
+                self.bomb_state[bomb_id]["turn_active"] += 1
+                self.bomb_state[bomb_id]["countdown"] -= 1
+
+            turn_active = self.bomb_state[bomb_id]["turn_active"]
+            destination = self.bomb_state[bomb_id]["destination"]
+            distance_from_target = self.state.distance_matrix[source, destination] if destination != -1 else -1
+            if (bomb['player'] == -self.player_id) & (turn_active > distance_from_target):
+                for fid, _, _ in targets:
+                    distance_from_target = self.state.distance_matrix[source, fid]
+                    if turn_active <= distance_from_target:
+                        self.bomb_state[bomb_id]["destination"] = fid
+                        self.bomb_state[bomb_id]["countdown"] = distance_from_target - turn_active
+                        break
+
+            # EVACUATE FACTORY
+            if (bomb['player'] == -self.player_id) & (self.bomb_state[bomb_id]["countdown"] == 2):
+                evacuate = self.bomb_state[bomb_id]["destination"]
+                troops = self.state.factories[evacuate, TROOPS]
+                refugee = np.argsort(self.state.distance_matrix[evacuate, :])
+                for fid in refugee:
+                    if self.my_factories[fid] & (fid != evacuate):
+                        self.action_list.append(f"MOVE {evacuate} {fid} {troops}")
+                        break
+
+
     def select_move(self):
         target_value = self._compute_factories_value()
+        #print(f"{[(fid, target_value[fid]) for fid in self.state.factories[:, ID]]}", file=sys.stderr)
         max_required_target = np.max(self.troops_required_matrix, axis=0)
         ordered_targets = np.array(list(reversed(np.argsort(target_value))))
         ordered_targets = ordered_targets[(target_value[ordered_targets] > 1) &
                                           (max_required_target[ordered_targets] > 0)]
+
         for target_id in ordered_targets:
             max_troops_required = max_required_target[target_id]
             if max_troops_required <= sum(self.troops_reserve_vector):
@@ -207,6 +260,7 @@ class Player:
     def select_plan(self):
         self.select_move()
         self.select_increments()
+        self.predict_bomb()
         if len(self.action_list) == 0:
             self.action_list.append("WAIT")
 
@@ -234,5 +288,6 @@ if __name__ == "__main__":
         agent.select_plan()
         agent.execute_plan()
         agent.reset()
-        game.troops[:, :, :] = 0
+        game.reset()
+
 

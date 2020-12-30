@@ -22,8 +22,8 @@ class MyTestCase(unittest.TestCase):
                                                  [int(d * np.sqrt(2)), d, d, 0]])
         square_state.max_distance = int(d * np.sqrt(2))
         square_state.troops = np.zeros((square_state.factory_count, square_state.max_distance + 1, 2), dtype=int)
+        square_state.bombs = {0: {"id": 0, "player":-1, "source": 3, "destination": -1, "countdown": -1}}
         return square_state
-
 
     def create_duel(self, d, player, troops, prod, blocked):
         square_state = GameState()
