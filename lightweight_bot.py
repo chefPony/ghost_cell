@@ -125,7 +125,9 @@ class Player:
         else:
             factory_cost, troop_cost = self._stationing_troops_cost(factory_id), self._moving_troops_cost(factory_id)
             troops = self.state.factories[factory_id, TROOPS]
-            available_troops = troops - factory_cost - max(troop_cost, 0)
+            prod = self.state.factories[factory_id, PROD]
+            blocked = self.state.factories[factory_id, BLOCKED]
+            available_troops = troops + prod * (blocked == 0) - factory_cost - max(troop_cost, 0)
             return available_troops * (available_troops > 0)
 
     def _compute_target_value_matrix(self):
@@ -182,7 +184,7 @@ class Player:
                    (1 - self.factory_value_penalty)
         else:
             coef = 1
-        return prod * coef + 0.1
+        return prod * coef
 
     def select_move(self):
         ordered_targets = reversed(np.argsort(np.sum(self.move_value_matrix, axis=0)))
@@ -199,7 +201,7 @@ class Player:
                 ordered_sources = ordered_sources[to_consider]
                 k = 0
                 total_discount_ratio = 0
-                while total_discount_ratio < 1:
+                while (total_discount_ratio < 1) & (k < len(ordered_sources)):
                     source_id = ordered_sources[k]
                     n_cyborgs = int(min(1./discount_ratio[source_id], 1.) * self.troops_reserve_matrix[source_id, target_id])
                     self.action_list.append(f"MOVE {source_id} {target_id} {n_cyborgs}")
