@@ -1,4 +1,4 @@
-from arena import Scenario
+from scenario import Scenario
 from entities import Factory
 import numpy as np
 from constants import WIDTH, HEIGHT, EXTRA_SPACE_BETWEEN_FACTORIES, MIN_PRODUCTION_RATE, MAX_PRODUCTION_RATE,\
@@ -60,16 +60,17 @@ class ScenarioGenerator:
                     factory.prod += 1
                     total_production_rate += 1
 
-        get_distance = lambda factory_1, factory_2: int(
-                (np.sqrt((factory_1.point[0] - factory_2.point[0]) ** 2 + (factory_1.point[1] - factory_2.point[1]) ** 2)
-                 - factory_radius * 2) / 800)
-
         links = list()
         for i in range(factory_count):
             for j in range(i+1, factory_count):
-                links.append((i, j, get_distance(factories[i], factories[j])))
+                links.append((i, j, get_distance(factories[i], factories[j], factory_radius)))
 
         scenario = Scenario(factories=factories, links=links)
         return scenario
 
 
+def get_distance(factory_1, factory_2, factory_radius):
+    d = round(
+              (np.sqrt((factory_1.point[0] - factory_2.point[0]) ** 2 + (factory_1.point[1] - factory_2.point[1]) ** 2)
+               - factory_radius * 2) / 800)
+    return d

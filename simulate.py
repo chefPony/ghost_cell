@@ -12,7 +12,7 @@ import numpy as np
 from scenario_generator import ScenarioGenerator
 from constants import MIN_FACTORY_COUNT, MAX_FACTORY_COUNT
 
-PARALLEL = True
+PARALLEL = False
 NUM_CPU = psutil.cpu_count(logical = False)
 
 parser = argparse.ArgumentParser(description='Simulate ghost in the cell game')
