@@ -12,8 +12,8 @@ import numpy as np
 from scenario_generator import ScenarioGenerator
 from constants import MIN_FACTORY_COUNT, MAX_FACTORY_COUNT
 
-PARALLEL = False
-NUM_CPU = psutil.cpu_count(logical = False)
+PARALLEL = True
+NUM_CPU = psutil.cpu_count(logical=False)
 
 parser = argparse.ArgumentParser(description='Simulate ghost in the cell game')
 parser.add_argument('--n_sim', metavar='N', type=int, help='number of simulations', required=True)
@@ -80,7 +80,8 @@ def main():
             records.append(r)
 
     stat = pd.DataFrame.from_records(records)
-    stat.to_csv(f"simulation_{args.player_1.split('.')[0]}_vs_{args.player_2.split('.')[0]}.csv", index=False)
+    stat.to_csv(f"simulations/simulation_{args.player_1.split('.')[0]}_vs_{args.player_2.split('.')[0]}.csv",
+                index=False)
 
     n_games = stat.shape[0]
     player_1_wins = sum(stat.win == args.player_1)
