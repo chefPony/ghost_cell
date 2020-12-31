@@ -11,7 +11,7 @@ import numpy as np
 from scenario_generator import ScenarioGenerator
 from constants import MIN_FACTORY_COUNT, MAX_FACTORY_COUNT
 
-PARALLEL = True
+PARALLEL = False
 NUM_CPU = psutil.cpu_count(logical=False)
 
 parser = argparse.ArgumentParser(description='Simulate ghost in the cell game')
@@ -54,7 +54,7 @@ class Simulator:
                   "playing_time": time() - start_game}
 
         p0.kill(), p1.kill()
-        #p0.wait(), p1.wait()
+        p0.wait(), p1.wait()
 
         return result
 
