@@ -303,8 +303,8 @@ class Player:
         self.troops_reserve_vector[factory_id] -= 10
 
     def select_plan(self):
-        self.select_move()
         self.select_increments()
+        self.select_move()
         self.predict_bomb()
         if len(self.action_list) == 0:
             self.action_list.append("WAIT")
