@@ -297,6 +297,10 @@ class Player:
                 #print(f" AVAILABLE {self.troops_reserve_matrix}", file=sys.stderr)
                 #print(f" INC FACTORY {source_id} {available} {self.state.factories[source_id, TROOPS]}", file=sys.stderr)
                 self.action_list.append(f"INC {source_id}")
+                self._update_after_increment(source_id)
+
+    def _update_after_increment(self, factory_id):
+        self.troops_reserve_vector[factory_id] -= 10
 
     def select_plan(self):
         self.select_move()
