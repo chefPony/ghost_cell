@@ -3,7 +3,7 @@ import unittest
 import numpy as np
 
 from ghost_cell.bots.lightweight_bot import Player, GameState, ID, PLAYER, TROOPS, PROD, BLOCKED, dijkstra
-#from ghost_cell.scenario_generator import ScenarioGenerator
+from ghost_cell.scenario_generator import ScenarioGenerator
 
 class MyTestCase(unittest.TestCase):
 
@@ -211,6 +211,11 @@ class MyTestCase(unittest.TestCase):
         path_tree = dict()
         for source in range(scenario.factory_count):
             dijkstra(scenario.distance_matrix, source, min_dist_matrix, path_tree)
+
+        for source in range(scenario.factory_count):
+            for target in range(scenario.factory_count):
+                self.assertLessEqual(min_dist_matrix[source, target], scenario.distance_matrix[source, target])
+        self.assertEqual(len(path_tree), 7*6)
 
 if __name__ == '__main__':
     unittest.main()

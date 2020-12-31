@@ -32,9 +32,9 @@ def dijkstra(distance_matrix, source, min_distance_matrix, path_tree):
         path_tree[(source, n)] = deque()
         current = n
         while current != source:
-            path_tree[(source, n)].pushleft(current)
+            path_tree[(source, n)].appendleft(current)
             current = prev[current]
-        path_tree[(source, n)].pushleft(source)
+        path_tree[(source, n)].appendleft(source)
 
 class GameState:
     def __init__(self):
