@@ -37,11 +37,11 @@ class Simulator:
             p0 = Popen(["python", f"{BOT_PATH}/{player_1}"], stdout=PIPE, stdin=PIPE, stderr=sys.stderr, shell=False, text=True,
                        bufsize=-1)
         else:
-            p0 = Popen([f"./{BOT_PATH}/{player_1}"], stdout=PIPE, stdin=PIPE, stderr=sys.stderr, shell=False, text=True, bufsize=-1)
+            p0 = Popen([f"cd {BOT_PATH}/./{player_1}"], stdout=PIPE, stdin=PIPE, stderr=sys.stderr, shell=False, text=True, bufsize=-1)
         if player_2.endswith(".py"):
             p1 = Popen(['python', f"{BOT_PATH}/{player_2}"], stdout=PIPE, stdin=PIPE, stderr=sys.stderr, shell=False, text=True, bufsize=-1)
         else:
-            p1 = Popen([f"./{BOT_PATH}/{player_2}"], stdout=PIPE, stdin=PIPE, stderr=sys.stderr, shell=False, text=True, bufsize=-1)
+            p1 = Popen([f"{BOT_PATH}/./{player_2}"], stdout=PIPE, stdin=PIPE, stderr=sys.stderr, shell=False, text=True, bufsize=-1)
 
         scenario = ScenarioGenerator.generate(factory_count=factory_count)
         if int(time()*1e4) % 2 == 0:
