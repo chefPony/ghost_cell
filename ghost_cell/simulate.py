@@ -6,6 +6,7 @@ import argparse
 import multiprocessing as mp
 import psutil
 from functools import partial
+from datetime import datetime
 
 import pandas as pd
 import numpy as np
@@ -21,7 +22,7 @@ parser = argparse.ArgumentParser(description='Simulate ghost in the cell game')
 parser.add_argument('--n_sim', metavar='N', type=int, help='number of simulations', required=True)
 parser.add_argument('--player_1', type=str, help='bot to use as player 1', required=True)
 parser.add_argument('--player_2', type=str, help='bot to use as player 2', required=True)
-parser.add_argument('--parallel', type=bool, help='if simulation should run in parallel on cpus', required=False,
+parser.add_argument('--parallel', type=bool, help='if simulation should run in parallel on cpus', required=True,
                     default=False)
 
 class Simulator:
@@ -75,28 +76,30 @@ def main():
     records = list()
     if args.parallel:
         print(f"Parallelize simulation on {NUM_CPU} cores")
-        # TODO: better to instantiate the class inside the map to avoid processes step over each other
         records = pool.map(simulate_scenario, list(factory_counts))
     else:
         for n_factory in factory_counts:
             r = simulate_scenario(factory_count=n_factory)
             records.append(r)
 
+    datestamp = datetime.today().strftime('%Y-%m-%d-%H:%M:%S').replace('-', '').replace(':', '')
     stat = pd.DataFrame.from_records(records)
-    stat.to_csv(f"simulations/simulation_{args.player_1.split('.')[0]}_vs_{args.player_2.split('.')[0]}.csv",
+    stat.to_csv(f"simulations/simulation_{datestamp}_{args.player_1.split('.')[0]}_vs_{args.player_2.split('.')[0]}.csv",
                 index=False)
 
     n_games = stat.shape[0]
     player_1_wins = sum(stat.win == args.player_1)
     player_2_wins = sum(stat.win == args.player_2)
-    p_1, p_2 = player_1_wins/n_games, player_2_wins/n_games
-    b = np.round(1.96 * np.sqrt(p_1 * p_2 / n_games), 3)
+    draws = sum(stat.win == "draw")
+    p_1, p_2 = player_1_wins/(n_games-draws), player_2_wins/(n_games-draws)
+    b = 1.96 * np.sqrt(p_1 * p_2 / (n_games - draws))
     print(f"Simulation over in {time() - start}")
     print(f"Games played {n_games}")
     print(f"{args.player_1} total wons: {player_1_wins}")
     print(f"{args.player_2} total wons: {player_2_wins}")
-    print(f"{args.player_1} win probability 95% confidence {p_1 - b} {p_1} {p_1 + b}")
-    print(f"{args.player_2} win probability 95% confidence {p_2 - b} {p_2} {p_2 + b}")
+    print(f"Draws: {draws}")
+    print(f"{args.player_1} win probability 95% confidence {p_1 - b:.3f} {p_1:.3f} {p_1 + b:.3f}")
+    print(f"{args.player_2} win probability 95% confidence {p_2 - b:.3f} {p_2:.3f} {p_2 + b:.3f}")
 
 
 if __name__ == "__main__":
