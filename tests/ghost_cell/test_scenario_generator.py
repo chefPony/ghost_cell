@@ -1,7 +1,7 @@
 import unittest
-from constants import MIN_FACTORY_COUNT, MAX_FACTORY_COUNT, MIN_TOTAL_PRODUCTION_RATE, PLAYER_INIT_UNITS_MIN,\
+from ghost_cell.constants import MIN_TOTAL_PRODUCTION_RATE, PLAYER_INIT_UNITS_MIN,\
     PLAYER_INIT_UNITS_MAX
-from scenario_generator import ScenarioGenerator
+from ghost_cell.scenario_generator import ScenarioGenerator
 
 class ScenarioGeneratorTest(unittest.TestCase):
 

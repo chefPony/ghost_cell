@@ -1,4 +1,4 @@
-import ghost_cell
+from ghost_cell.bots import ghost_cell
 from collections import defaultdict
 import numpy as np
 import unittest

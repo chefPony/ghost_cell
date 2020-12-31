@@ -2,7 +2,7 @@ import unittest
 
 import numpy as np
 
-from lightweight_bot import Player, GameState, ID, PLAYER, TROOPS, PROD, BLOCKED, DIST, FROM, TO
+from ghost_cell.bots.lightweight_bot import Player, GameState, ID, PLAYER, TROOPS, PROD, BLOCKED
 
 
 class MyTestCase(unittest.TestCase):
