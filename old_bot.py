@@ -185,7 +185,7 @@ class Player:
             ratio = (sum_distance_enemy/sum_distance_ally)
         else:
             ratio = 1
-        return (prod + 0.1) * ratio
+        return (prod + 0.01) * ratio
 
     def _compute_value(self):
         value = np.array([self._factory_value(fid, 3) for fid in self.state.factories[:, ID]])
@@ -261,13 +261,13 @@ class Player:
                     self._update_from_move(source_id, target_id, n_cyborgs)
                     if (committed >= required_from_source) | (committed > max_troops_required):
                         break
-    # TODO: try to prioritize by prod and distance
+
     def select_move_2(self):
         target_value = self._compute_value()
         #print(f"{[(fid, target_value[fid]) for fid in self.state.factories[:, ID]]}", file=sys.stderr)
         max_required_target = np.max(self.troops_required_matrix, axis=0)
         ordered_targets = np.array(list(reversed(np.argsort(target_value))))
-        ordered_targets = ordered_targets[(target_value[ordered_targets] > 0.1) &
+        ordered_targets = ordered_targets[(target_value[ordered_targets] > 1) &
                                           (max_required_target[ordered_targets] > 0)]
 
         for target_id in ordered_targets:
@@ -315,7 +315,7 @@ class Player:
 if __name__ == "__main__":
     game = GameState()
     game.initialize(input)
-    agent = Player(player_id=1, moving_troop_dist_th=5, moving_troop_discount=1., stationing_troop_dist_th=3,
+    agent = Player(player_id=1, moving_troop_dist_th=5, moving_troop_discount=1., stationing_troop_dist_th=5,
                    stationing_troop_discount=0.7)
     # game loop
     while True:

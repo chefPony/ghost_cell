@@ -24,8 +24,9 @@ class Simulator:
     def __init__(self, player_1, player_2):
         self.player_1 = player_1
         self.player_2 = player_2
+        self.count = 0
 
-
+    # TODO: better be static?
     def simulate(self, factory_count):
         if self.player_1.endswith(".py"):
             p0 = Popen(["python", self.player_1], stdout=PIPE, stdin=PIPE, stderr=sys.stderr, shell=False, text=True,
@@ -46,12 +47,13 @@ class Simulator:
             bot_player = {-1: self.player_1, 1: self.player_2}
         start_game = time()
         self.scenario.match()
-        print(f"Winner is {bot_player.get(self.scenario.winner, 'draw')} by {self.scenario.win_condition} in "
+        print(f"{self.count} Winner is {bot_player.get(self.scenario.winner, 'draw')} by {self.scenario.win_condition} in "
               f"{np.around(time()-start_game, 2)}s", file=sys.stderr)
         result = {"win": bot_player.get(self.scenario.winner, 'draw'), "win_condition": self.scenario.win_condition,
                   "turn": self.scenario.turn, "factory_count": factory_count, "as_player": self.scenario.winner,
                   "final_score": " ".join([f"{player}|{score} " for player, score in self.scenario.score.items()]),
                   "playing_time": time() - start_game}
+        self.count += 1
 
         p0.kill(), p1.kill()
         p0.wait(), p1.wait()
@@ -69,6 +71,7 @@ def main():
     records = list()
     if PARALLEL:
         print(f"Parallelize simulation on {NUM_CPU} cores")
+        # TODO: better to instantiate the class inside the map to avoid processes step over each other
         records = pool.map(simulator.simulate, list(factory_counts))
     else:
         for n_factory in factory_counts:
