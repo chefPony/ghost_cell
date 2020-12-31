@@ -148,7 +148,7 @@ class Player:
 
         #self.total_capacity = sum(troops_reserve)
         self.troops_reserve_vector = troops_reserve
-        #self.troops_reserve_matrix = np.dot(troops_reserve, self.matrix_converter)
+        self.troops_reserve_matrix = np.dot(troops_reserve, self.matrix_converter)
 
     def _required_troops_factory(self, factory_id):
         player = self.state.factories[factory_id, PLAYER]
@@ -185,7 +185,7 @@ class Player:
             ratio = (sum_distance_enemy/sum_distance_ally)
         else:
             ratio = 1
-        return (prod + 1) * ratio
+        return (prod + 0.01) * ratio
 
     def _compute_value(self):
         value = np.array([self._factory_value(fid, 3) for fid in self.state.factories[:, ID]])
@@ -236,8 +236,33 @@ class Player:
                         self.action_list.append(f"MOVE {evacuate} {fid} {troops + prod}")
                         break
 
-
     def select_move(self):
+        target_value = self._compute_value()
+        #print(f"{[(fid, target_value[fid]) for fid in self.state.factories[:, ID]]}", file=sys.stderr)
+        max_required_target = np.max(self.troops_required_matrix, axis=0)
+        ordered_targets = np.array(list(reversed(np.argsort(target_value))))
+        ordered_targets = ordered_targets[(target_value[ordered_targets] > 1) &
+                                          (max_required_target[ordered_targets] > 0)]
+
+        for target_id in ordered_targets:
+            max_troops_required = max_required_target[target_id]
+            if max_troops_required <= sum(self.troops_reserve_vector):
+                ordered_sources = np.array(list(reversed(np.argsort(self.state.distance_matrix[:, target_id]))))
+                to_consider = (self.my_factories[ordered_sources]) & (ordered_sources != target_id) & \
+                              (self.troops_reserve_vector[ordered_sources].reshape((-1,)) > 0)
+                ordered_sources = ordered_sources[to_consider]
+                committed = 0
+                k = 0
+                for source_id in ordered_sources:
+                    required_from_source = self.troops_required_matrix[source_id, target_id]
+                    n_cyborgs = int(min(required_from_source, self.troops_reserve_vector[source_id]))
+                    self.action_list.append(f"MOVE {source_id} {target_id} {n_cyborgs}")
+                    committed += n_cyborgs
+                    self._update_from_move(source_id, target_id, n_cyborgs)
+                    if (committed >= required_from_source) | (committed > max_troops_required):
+                        break
+
+    def select_move_2(self):
         target_value = self._compute_value()
         #print(f"{[(fid, target_value[fid]) for fid in self.state.factories[:, ID]]}", file=sys.stderr)
         max_required_target = np.max(self.troops_required_matrix, axis=0)
