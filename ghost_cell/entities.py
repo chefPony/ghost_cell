@@ -1,4 +1,4 @@
-from exception import InvalidAction
+from ghost_cell.exception import InvalidAction
 
 class Entity:
 

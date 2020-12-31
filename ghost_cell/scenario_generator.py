@@ -1,7 +1,8 @@
-from scenario import Scenario
-from entities import Factory
 import numpy as np
-from constants import WIDTH, HEIGHT, EXTRA_SPACE_BETWEEN_FACTORIES, MIN_PRODUCTION_RATE, MAX_PRODUCTION_RATE,\
+
+from ghost_cell.scenario import Scenario
+from ghost_cell.entities import Factory
+from ghost_cell.constants import WIDTH, HEIGHT, EXTRA_SPACE_BETWEEN_FACTORIES, MIN_PRODUCTION_RATE, MAX_PRODUCTION_RATE,\
     PLAYER_INIT_UNITS_MIN, PLAYER_INIT_UNITS_MAX, MIN_TOTAL_PRODUCTION_RATE
 
 

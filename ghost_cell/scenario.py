@@ -1,14 +1,14 @@
 import sys
 import numpy as np
 from time import time
-from entities import Factory, MovingTroop, Bomb
 from collections import defaultdict
-from exception import InvalidAction
 from subprocess import Popen, PIPE
-import threading
-from queue import Queue, Empty
-from constants import TIMEOUT_MOVE
 import select
+
+from ghost_cell.entities import Factory, MovingTroop, Bomb
+from ghost_cell.exception import InvalidAction
+from ghost_cell.constants import TIMEOUT_MOVE
+
 
 
 class Battle:

@@ -1,10 +1,40 @@
 import sys
 import numpy as np
-from collections import defaultdict
+from collections import deque
+from heapq import heappush, heappop
 from time import time
 
 ID, PLAYER, TROOPS, PROD, FROM, TO, SIZE, DIST, BLOCKED = 0, 1, 2, 3, 2, 3, 4, 5, 5
 PLAYER_MAP = {-1: 1, 1: 0}
+
+
+def dijkstra(distance_matrix, source, min_distance_matrix, path_tree):
+    n_node = distance_matrix.shape[0]
+    dist_dict = {source: 0}
+    node_set = list()
+    heappush(node_set, (0, source))
+    explored = list()
+    prev = dict()
+    while len(node_set) > 0:
+        current_d, current_n = heappop(node_set)
+        if current_d > dist_dict[current_n]:
+            continue
+        to_explore = [n for n in range(n_node) if (n != current_n) and (n not in explored)]
+        for neigh in to_explore:
+            d_neigh = current_d + distance_matrix[current_n, neigh]
+            if d_neigh < dist_dict.get(neigh, 1000):
+                dist_dict[neigh] = d_neigh
+                prev[neigh] = current_n
+                heappush(node_set, (d_neigh, neigh))
+
+    for n in [n for n in range(n_node) if n != source]:
+        min_distance_matrix[source, n] = dist_dict[n]
+        path_tree[(source, n)] = deque()
+        current = n
+        while current != source:
+            path_tree[(source, n)].pushleft(current)
+            current = prev[current]
+        path_tree[(source, n)].pushleft(source)
 
 class GameState:
     def __init__(self):
@@ -22,6 +52,11 @@ class GameState:
         self.factories = np.zeros((self.factory_count, 6), dtype=int)
         self.troops = np.zeros((self.factory_count, self.max_distance + 1, 2), dtype=int)
         self.bombs = dict()
+
+        self.path_tree = dict()
+        self.min_distance_matrix = np.zeros((self.factory_count, self.factory_count), dtype=int)
+        for source in range(self.factory_count):
+            dijkstra(self.distance_matrix, source, self.min_distance_matrix, self.path_tree)
 
     def update_factory(self, entity_id, player, troops, prod, blocked):
         self.factories[entity_id, ID] = entity_id
@@ -56,7 +91,6 @@ class GameState:
     def reset(self):
         self.troops[:, :, :] = 0
         self.bombs = dict()
-
 
 class Player:
 

@@ -2,8 +2,8 @@ import unittest
 
 import numpy as np
 
-from ghost_cell.bots.lightweight_bot import Player, GameState, ID, PLAYER, TROOPS, PROD, BLOCKED
-
+from ghost_cell.bots.lightweight_bot import Player, GameState, ID, PLAYER, TROOPS, PROD, BLOCKED, dijkstra
+#from ghost_cell.scenario_generator import ScenarioGenerator
 
 class MyTestCase(unittest.TestCase):
 
@@ -205,6 +205,12 @@ class MyTestCase(unittest.TestCase):
         player.select_plan()
         self.assertSequenceEqual(player.action_list, ["WAIT"])
 
+    def test_dijkstra(self):
+        scenario = ScenarioGenerator().generate(factory_count=7)
+        min_dist_matrix = np.zeros((scenario.factory_count, scenario.factory_count), dtype=int)
+        path_tree = dict()
+        for source in range(scenario.factory_count):
+            dijkstra(scenario.distance_matrix, source, min_dist_matrix, path_tree)
 
 if __name__ == '__main__':
     unittest.main()

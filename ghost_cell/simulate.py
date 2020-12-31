@@ -11,8 +11,8 @@ from datetime import datetime
 import pandas as pd
 import numpy as np
 
-from scenario_generator import ScenarioGenerator
-from constants import MIN_FACTORY_COUNT, MAX_FACTORY_COUNT
+from ghost_cell.scenario_generator import ScenarioGenerator
+from ghost_cell.constants import MIN_FACTORY_COUNT, MAX_FACTORY_COUNT
 
 BOT_PATH = os.path.abspath("ghost_cell/bots")
 RESULT_PATH = os.path.abspath("simulations")
