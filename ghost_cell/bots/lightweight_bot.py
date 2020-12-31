@@ -8,7 +8,7 @@ ID, PLAYER, TROOPS, PROD, FROM, TO, SIZE, DIST, BLOCKED = 0, 1, 2, 3, 2, 3, 4, 5
 PLAYER_MAP = {-1: 1, 1: 0}
 
 
-def dijkstra(distance_matrix, source, min_distance_matrix, path_tree):
+def dijkstra(distance_matrix, source, min_distance_matrix, step_matrix, path_tree):
     n_node = distance_matrix.shape[0]
     dist_dict = {source: 0}
     node_set = list()
@@ -32,9 +32,10 @@ def dijkstra(distance_matrix, source, min_distance_matrix, path_tree):
         path_tree[(source, n)] = deque()
         current = n
         while current != source:
-            path_tree[(source, n)].appendleft(current)
+            path_tree[(source, n)].appendleft((prev[current], current))
             current = prev[current]
-        path_tree[(source, n)].appendleft(source)
+        step_matrix[source, n] = len(path_tree[(source, n)])
+
 
 class GameState:
     def __init__(self):
@@ -55,8 +56,9 @@ class GameState:
 
         self.path_tree = dict()
         self.min_distance_matrix = np.zeros((self.factory_count, self.factory_count), dtype=int)
+        self.step_matrix = np.zeros((self.factory_count, self.factory_count), dtype=int)
         for source in range(self.factory_count):
-            dijkstra(self.distance_matrix, source, self.min_distance_matrix, self.path_tree)
+            dijkstra(self.distance_matrix, source, self.min_distance_matrix, self.step_matrix, self.path_tree)
 
     def update_factory(self, entity_id, player, troops, prod, blocked):
         self.factories[entity_id, ID] = entity_id
@@ -150,7 +152,7 @@ class Player:
         else:
             factory_cost, troop_cost = self._stationing_troops_cost(factory_id), self._moving_troops_cost(factory_id)
             troops = self.state.factories[factory_id, TROOPS]
-            #prod = self.state.factories[factory_id, PROD]
+            prod = self.state.factories[factory_id, PROD]
             #blocked = self.state.factories[factory_id, BLOCKED]
             available_troops = troops - factory_cost - max(troop_cost, 0)
             return available_troops * (available_troops > 0)
@@ -161,7 +163,7 @@ class Player:
 
     def _compute_prod_penalty_matrix(self):
         prod_vec = self.state.factories[:, PROD] * (self.state.factories[:, BLOCKED] == 0) * self.enemy_factories
-        self.prod_penalty_matrix = self.state.distance_matrix * prod_vec[None, :]
+        self.prod_penalty_matrix = (self.state.min_distance_matrix + self.state.step_matrix - 1) * prod_vec[None, :]
 
     def _compute_troops_required(self):
 
@@ -264,6 +266,11 @@ class Player:
                 evacuate = self.bomb_state[bomb_id]["destination"]
                 troops = self.state.factories[evacuate, TROOPS]
                 prod = self.state.factories[evacuate, PROD]
+                increments = min(troops/10, 3-prod)
+                while increments > 0:
+                    self.action_list.append(f"INC {evacuate}")
+                    troops -= 10
+                    increments -= 1
                 refugee = np.argsort(self.state.distance_matrix[evacuate, :])
                 for fid in refugee:
                     if self.my_factories[fid] & (fid != evacuate):
@@ -286,13 +293,16 @@ class Player:
                               (self.troops_reserve_vector[ordered_sources].reshape((-1,)) > 0)
                 ordered_sources = ordered_sources[to_consider]
                 committed = 0
-                k = 0
                 for source_id in ordered_sources:
-                    required_from_source = self.troops_required_matrix[source_id, target_id]
+                    move_list = self.state.path_tree[(source_id, target_id)]
+                    first_target = move_list[0][1]
+                    required_from_source = 0
+                    for isource, itarget in move_list:
+                        required_from_source += self.troops_required_matrix[isource, itarget]
                     n_cyborgs = int(min(required_from_source, self.troops_reserve_vector[source_id]))
-                    self.action_list.append(f"MOVE {source_id} {target_id} {n_cyborgs}")
+                    self.action_list.append(f"MOVE {source_id} {first_target} {n_cyborgs}")
                     committed += n_cyborgs
-                    self._update_from_move(source_id, target_id, n_cyborgs)
+                    self._update_from_move(source_id, first_target, n_cyborgs)
                     if (committed >= required_from_source) | (committed > max_troops_required):
                         break
     # TODO: try to prioritize by prod and distance

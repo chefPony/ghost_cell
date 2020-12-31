@@ -142,6 +142,11 @@ class MyTestCase(unittest.TestCase):
                                           [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                                           [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
                                           [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]])
+        state.min_distance_matrix = np.zeros((state.factory_count, state.factory_count), dtype=int)
+        state.step_matrix = np.zeros((state.factory_count, state.factory_count), dtype=int)
+        state.path_tree = dict()
+        for source in range(state.factory_count):
+            dijkstra(state.distance_matrix, source, state.min_distance_matrix, state.step_matrix, state.path_tree)
         return state
 
     def test_square_scenario(self):
@@ -208,9 +213,10 @@ class MyTestCase(unittest.TestCase):
     def test_dijkstra(self):
         scenario = ScenarioGenerator().generate(factory_count=7)
         min_dist_matrix = np.zeros((scenario.factory_count, scenario.factory_count), dtype=int)
+        step_matrix = np.zeros((scenario.factory_count, scenario.factory_count), dtype=int)
         path_tree = dict()
         for source in range(scenario.factory_count):
-            dijkstra(scenario.distance_matrix, source, min_dist_matrix, path_tree)
+            dijkstra(scenario.distance_matrix, source, min_dist_matrix, step_matrix, path_tree)
 
         for source in range(scenario.factory_count):
             for target in range(scenario.factory_count):
