@@ -1,9 +1,11 @@
+import sys
+import os
 from time import time
 from subprocess import Popen, PIPE
 import argparse
 import multiprocessing as mp
 import psutil
-import sys
+from functools import partial
 
 import pandas as pd
 import numpy as np
@@ -11,49 +13,51 @@ import numpy as np
 from scenario_generator import ScenarioGenerator
 from constants import MIN_FACTORY_COUNT, MAX_FACTORY_COUNT
 
-PARALLEL = False
+BOT_PATH = os.path.abspath("ghost_cell/bots")
+RESULT_PATH = os.path.abspath("simulations")
 NUM_CPU = psutil.cpu_count(logical=False)
 
 parser = argparse.ArgumentParser(description='Simulate ghost in the cell game')
 parser.add_argument('--n_sim', metavar='N', type=int, help='number of simulations', required=True)
 parser.add_argument('--player_1', type=str, help='bot to use as player 1', required=True)
 parser.add_argument('--player_2', type=str, help='bot to use as player 2', required=True)
+parser.add_argument('--parallel', type=bool, help='if simulation should run in parallel on cpus', required=False,
+                    default=False)
 
 class Simulator:
 
-    def __init__(self, player_1, player_2):
-        self.player_1 = player_1
-        self.player_2 = player_2
-        self.count = 0
+    def __init__(self):
+        pass
 
-    # TODO: better be static?
-    def simulate(self, factory_count):
-        if self.player_1.endswith(".py"):
-            p0 = Popen(["python", self.player_1], stdout=PIPE, stdin=PIPE, stderr=sys.stderr, shell=False, text=True,
+    @staticmethod
+    def simulate(factory_count, player_1, player_2):
+
+        if player_1.endswith(".py"):
+            p0 = Popen(["python", f"{BOT_PATH}/{player_1}"], stdout=PIPE, stdin=PIPE, stderr=sys.stderr, shell=False, text=True,
                        bufsize=-1)
         else:
-            p0 = Popen(["./"+self.player_1], stdout=PIPE, stdin=PIPE, stderr=sys.stderr, shell=False, text=True, bufsize=-1)
-        if self.player_2.endswith(".py"):
-            p1 = Popen(['python', self.player_2], stdout=PIPE, stdin=PIPE, stderr=sys.stderr, shell=False, text=True, bufsize=-1)
+            p0 = Popen([f"./{BOT_PATH}/{player_1}"], stdout=PIPE, stdin=PIPE, stderr=sys.stderr, shell=False, text=True, bufsize=-1)
+        if player_2.endswith(".py"):
+            p1 = Popen(['python', f"{BOT_PATH}/{player_2}"], stdout=PIPE, stdin=PIPE, stderr=sys.stderr, shell=False, text=True, bufsize=-1)
         else:
-            p1 = Popen(["./" + self.player_2], stdout=PIPE, stdin=PIPE, stderr=sys.stderr, shell=False, text=True, bufsize=-1)
+            p1 = Popen([f"./{BOT_PATH}/{player_2}"], stdout=PIPE, stdin=PIPE, stderr=sys.stderr, shell=False, text=True, bufsize=-1)
 
-        self.scenario = ScenarioGenerator.generate(factory_count=factory_count)
+        scenario = ScenarioGenerator.generate(factory_count=factory_count)
         if int(time()*1e4) % 2 == 0:
-            self.scenario.players = {1: p0, -1: p1}
-            bot_player = {1: self.player_1, -1: self.player_2}
+            scenario.players = {1: p0, -1: p1}
+            bot_player = {1: player_1, -1: player_2}
         else:
-            self.scenario.players = {-1: p0, 1: p1}
-            bot_player = {-1: self.player_1, 1: self.player_2}
+            scenario.players = {-1: p0, 1: p1}
+            bot_player = {-1: player_1, 1: player_2}
         start_game = time()
-        self.scenario.match()
-        print(f"{self.count} Winner is {bot_player.get(self.scenario.winner, 'draw')} by {self.scenario.win_condition} in "
+        scenario.match()
+        print(f"Winner is {bot_player.get(scenario.winner, 'draw')} by {scenario.win_condition} in "
               f"{np.around(time()-start_game, 2)}s", file=sys.stderr)
-        result = {"win": bot_player.get(self.scenario.winner, 'draw'), "win_condition": self.scenario.win_condition,
-                  "turn": self.scenario.turn, "factory_count": factory_count, "as_player": self.scenario.winner,
-                  "final_score": " ".join([f"{player}|{score} " for player, score in self.scenario.score.items()]),
+        result = {"win": bot_player.get(scenario.winner, 'draw'), "win_condition": scenario.win_condition,
+                  "turn": scenario.turn, "factory_count": factory_count, "as_player": scenario.winner,
+                  "final_score": " ".join([f"{player}|{score} " for player, score in scenario.score.items()]),
                   "playing_time": time() - start_game}
-        self.count += 1
+        #self.count += 1
 
         p0.kill(), p1.kill()
         p0.wait(), p1.wait()
@@ -63,22 +67,19 @@ class Simulator:
 def main():
     args = parser.parse_args()
     factory_counts = np.random.randint(MIN_FACTORY_COUNT, MAX_FACTORY_COUNT, args.n_sim)
-    simulator = Simulator(player_1=args.player_1, player_2=args.player_2)
+    simulate_scenario = partial(Simulator.simulate, player_1=args.player_1, player_2=args.player_2)
 
     start = time()
     pool = mp.Pool(NUM_CPU)
-
+    print(args.parallel)
     records = list()
-    if PARALLEL:
+    if args.parallel:
         print(f"Parallelize simulation on {NUM_CPU} cores")
         # TODO: better to instantiate the class inside the map to avoid processes step over each other
-        records = pool.map(simulator.simulate, list(factory_counts))
+        records = pool.map(simulate_scenario, list(factory_counts))
     else:
         for n_factory in factory_counts:
-            r = simulator.simulate(factory_count=n_factory)
-            #if r["win_condition"] == "invalid action":
-            #    print(simulator.scenario.input[-simulator.scenario.winner], file=sys.stderr)
-            #    break
+            r = simulate_scenario(factory_count=n_factory)
             records.append(r)
 
     stat = pd.DataFrame.from_records(records)
