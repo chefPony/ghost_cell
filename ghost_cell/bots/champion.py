@@ -369,6 +369,7 @@ class Player:
                 #print(f"{self.my_factories[source]}", file=sys.stderr)
                 self.action_list.append(f"BOMB {source} {target}")
                 self._update_after_bomb(source, target)
+                my_bomb_targets.append(target)
             else:
                 break
 
