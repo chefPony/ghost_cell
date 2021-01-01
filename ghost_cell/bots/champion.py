@@ -245,15 +245,15 @@ class Player:
             # EVACUATE FACTORY
             if (bomb['player'] == -self.player_id) & (self.bomb_state[bomb_id]["countdown"] == 1):
                 evacuate = self.bomb_state[bomb_id]["destination"]
-                already_inc = f"INC {evacuate}" in self.action_list
+                #already_inc = f"INC {evacuate}" in self.action_list
                 troops = self.troops_vector[evacuate]
-                prod = self.state.factories[evacuate, PROD] + already_inc
-                increments = round(min(troops / 10, 3-prod))
+                prod = self.state.factories[evacuate, PROD] #+ already_inc
+                #increments = round(min(troops / 10, 3-prod))
                 #print(f"{increments} {troops} {prod}", file=sys.stderr)
-                while increments > 0:
-                    self.action_list.append(f"INC {evacuate}")
-                    troops -= 10
-                    increments -= 1
+                #while increments > 0:
+                #    self.action_list.append(f"INC {evacuate}")
+                #    troops -= 10
+                #    increments -= 1
                 refugee = np.argsort(self.state.distance_matrix[evacuate, :])
                 for fid in refugee:
                     if self.my_factories[fid] & (fid != evacuate):
