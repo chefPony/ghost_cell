@@ -175,9 +175,9 @@ class Player:
         block = self.state.factories[factory_id, BLOCKED]
         troop_cost, factory_cost = self._moving_troops_cost(factory_id), self._stationing_troops_cost(factory_id)
         if player == self.player_id:
-            required_to_take = troop_cost + factory_cost - troops - (prod * block == 0)
+            required_to_take = troop_cost + factory_cost - troops - prod * (block == 0)
         elif player == -self.player_id:
-            required_to_take = troop_cost + factory_cost + troops + 1
+            required_to_take = troop_cost + factory_cost + troops + 1 + prod * (block == 0)
         else:
             required_to_take = troop_cost + factory_cost + troops + 1
 
