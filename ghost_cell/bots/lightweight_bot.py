@@ -246,7 +246,8 @@ class Player:
                         break
 
             # EVACUATE FACTORY
-            if (bomb['player'] == -self.player_id) & (self.bomb_state[bomb_id]["countdown"] == 1):
+            destination = self.bomb_state[bomb_id]["destination"]
+            if (self.my_factories[destination]) & (self.bomb_state[bomb_id]["countdown"] == 1):
                 evacuate = self.bomb_state[bomb_id]["destination"]
                 already_inc = f"INC {evacuate}" in self.action_list
                 troops = self.troops_vector[evacuate]
