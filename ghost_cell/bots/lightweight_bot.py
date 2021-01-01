@@ -112,6 +112,8 @@ class Player:
         self.prod_penalty_matrix = None
         self.bomb_state = dict()
 
+        self.bomb_reserve = 2
+
     def _moving_troops_cost(self, factory_id: int):
         troop_discount = np.array([self.moving_troop_discount ** i for i in range(self.moving_troop_dist_th + 1)])
         incoming_enemy = self.state.troops[factory_id, :self.moving_troop_dist_th + 1, PLAYER_MAP[-self.player_id]]
@@ -314,6 +316,52 @@ class Player:
                 self.action_list.append(f"INC {source_id}")
                 self._update_after_increment(source_id)
 
+    def select_bomb_target(self):
+        bomb_value_matrix = np.zeros((self.state.factory_count, self.state.factory_count))
+        stationed_troops = -np.dot((self.state.factories[:, TROOPS] * self.state.factories[:, PLAYER]).reshape(-1, 1),
+                                  self.matrix_converter).T
+        prod_block = -np.dot((self.state.factories[:, PROD] * 5 * self.state.factories[:, PLAYER]).reshape(-1, 1),
+                            self.matrix_converter).T
+        distance_penalty = np.power(np.array(0.9), self.state.distance_matrix)
+        bomb_value_matrix = stationed_troops * distance_penalty
+        #TODO: fix this
+        sign = np.sign(bomb_value_matrix)
+        bomb_value_matrix = np.floor(np.abs(bomb_value_matrix/2))
+        bomb_value_matrix[(bomb_value_matrix >= 5) & (bomb_value_matrix < 10)] = 10
+        bomb_value_matrix *= sign
+        for source_id in range(self.state.factory_count):
+            for target_id in range(self.state.factory_count):
+                if source_id == target_id:
+                    bomb_value_matrix[source_id, target_id] = 0
+                else:
+                    distance = self.state.distance_matrix[source_id, target_id]
+                    discount_vector = np.power(np.array(0.9), np.arange(distance, 0, -1))
+                    incoming_enemy = sum(self.state.troops[target_id, 1:(distance + 1),
+                                         PLAYER_MAP[-self.player_id]] * discount_vector)
+                    incoming_ally = sum(self.state.troops[target_id, 1:(distance + 1),
+                                        PLAYER_MAP[self.player_id]] * discount_vector)
+                    bomb_value_matrix[source_id, target_id] += (incoming_enemy - incoming_ally)
+
+        legal_sources = np.dot(self.my_factories.reshape(-1, 1),  self.matrix_converter)
+        bomb_value_matrix = (bomb_value_matrix + prod_block) * legal_sources
+
+        sources, targets = np.unravel_index(np.argsort(-bomb_value_matrix, axis=None), bomb_value_matrix.shape)
+
+        if len(self.state.bombs) > 0:
+            my_bomb_targets = [v["destination"] for k, v in self.state.bombs.items() if v["player"] == self.player_id]
+        else:
+            my_bomb_targets = list()
+
+        for source, target in zip(sources, targets):
+            if (bomb_value_matrix[source, target] > 20) & (target not in my_bomb_targets) & (self.bomb_reserve > 0):
+                #print(f"BOMB {source} {target}", file=sys.stderr)
+                #print(f"{self.my_factories[source]}", file=sys.stderr)
+                self.action_list.append(f"BOMB {source} {target}")
+                self._update_after_bomb(source, target)
+            else:
+                break
+
+
     def _update_from_state(self, game_state: GameState):
         self.state = game_state
         self.matrix_converter = np.ones((1, self.state.factory_count))
@@ -344,8 +392,14 @@ class Player:
         self.troops_reserve_vector[factory_id] -= 10
         self.troops_vector[factory_id] -= 10
 
+    def _update_after_bomb(self, source_id: int, target_id: int):
+        self.troops_reserve_vector[source_id] = 0
+        self.bomb_reserve -= 1
+
     def select_plan(self):
         self.select_increments()
+        if self.bomb_reserve > 0:
+            self.select_bomb_target()
         self.select_move()
         self.predict_bomb()
         if len(self.action_list) == 0:

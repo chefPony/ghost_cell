@@ -144,6 +144,7 @@ class MyTestCase(unittest.TestCase):
                                           [0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0]])
         state.min_distance_matrix = np.zeros((state.factory_count, state.factory_count), dtype=int)
         state.step_matrix = np.zeros((state.factory_count, state.factory_count), dtype=int)
+        state.bombs = dict()
         state.path_tree = dict()
         for source in range(state.factory_count):
             dijkstra(state.distance_matrix, source, state.min_distance_matrix, state.step_matrix, state.path_tree)
@@ -192,6 +193,15 @@ class MyTestCase(unittest.TestCase):
                         stationing_troop_discount=0.7)
         player._update_from_state(game_state=state)
         player.select_plan()
+        print(state.factories[:,[ID, PLAYER, TROOPS, PROD]])
+        print(player.action_list)
+
+    def test_bomb_launch(self):
+        state = self.create_complex_scenario()
+        player = Player(player_id=1, moving_troop_dist_th=100, moving_troop_discount=0.95, stationing_troop_dist_th=100,
+                        stationing_troop_discount=0.7)
+        player._update_from_state(game_state=state)
+        player.select_bomb_target()
         print(state.factories[:,[ID, PLAYER, TROOPS, PROD]])
         print(player.action_list)
 
