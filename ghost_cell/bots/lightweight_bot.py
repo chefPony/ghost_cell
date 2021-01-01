@@ -1,6 +1,6 @@
 import sys
 import numpy as np
-from collections import deque
+from collections import deque, defaultdict
 from heapq import heappush, heappop
 from time import time
 
@@ -110,7 +110,7 @@ class Player:
         self.state = None
         self.my_factories, self.enemy_factories, self.total_prod = None, None, 0
         self.prod_penalty_matrix = None
-        self.bomb_state = dict()
+        self.bomb_radar = dict()
 
         self.bomb_reserve = 2
 
@@ -212,43 +212,46 @@ class Player:
         # print(value, file=sys.stderr)
         return value
 
-    def predict_bomb(self):
+    def _refresh_bomb_radar(self):
+        previous_radar = self.bomb_radar.copy()
+        self.bomb_radar = dict()
+        for bomb_id, bomb_from_state in self.state.bombs.items():
+
+            if bomb_id not in previous_radar.keys():
+                self.bomb_radar[bomb_id] = bomb_from_state
+                self.bomb_radar[bomb_id]["turn_active"] = 1
+            else:
+                self.bomb_radar[bomb_id] = previous_radar[bomb_id]
+                self.bomb_radar[bomb_id]["turn_active"] += 1
+                self.bomb_radar[bomb_id]["countdown"] -= 1
+
+    def _predict_enemy_bombs_destination(self):
         fids = self.state.factories[self.my_factories, ID]
         troops = self.state.factories[self.my_factories, TROOPS]
         prod = self.state.factories[self.my_factories, PROD]
         targets = [(fid, tr, pr) for fid, tr, pr in zip(fids, troops, prod)]
         targets = list(sorted(targets, key=lambda x: (-x[1], -x[2])))
 
-        bomb_keys = list(self.bomb_state.keys())
-        for bid in bomb_keys:
-            if bid not in self.state.bombs.keys():
-                self.bomb_state.pop(bid)
+        for bomb_id, bomb_from_radar in self.bomb_radar.items():
+            source = bomb_from_radar["source"]
+            turn_active = bomb_from_radar["turn_active"]
+            dest_from_radar = bomb_from_radar["destination"]
+            distance_from_target = self.state.distance_matrix[source, dest_from_radar] if dest_from_radar != -1 else -1
 
-        for bomb_id, bomb in self.state.bombs.items():
-            source, destination, countdown = bomb["source"], bomb["destination"], bomb["countdown"]
-
-            if bomb_id not in self.bomb_state.keys():
-                self.bomb_state[bomb_id] = bomb
-                self.bomb_state[bomb_id]["turn_active"] = 1
-            else:
-                self.bomb_state[bomb_id]["turn_active"] += 1
-                self.bomb_state[bomb_id]["countdown"] -= 1
-
-            turn_active = self.bomb_state[bomb_id]["turn_active"]
-            destination = self.bomb_state[bomb_id]["destination"]
-            distance_from_target = self.state.distance_matrix[source, destination] if destination != -1 else -1
-            if (bomb['player'] == -self.player_id) & (turn_active > distance_from_target):
+            if (bomb_from_radar['player'] == -self.player_id) & (turn_active > distance_from_target):
                 for fid, _, _ in targets:
                     distance_from_target = self.state.distance_matrix[source, fid]
                     if turn_active <= distance_from_target:
-                        self.bomb_state[bomb_id]["destination"] = fid
-                        self.bomb_state[bomb_id]["countdown"] = distance_from_target - turn_active
+                        self.bomb_radar[bomb_id]["destination"] = fid
+                        self.bomb_radar[bomb_id]["countdown"] = distance_from_target - turn_active
                         break
 
+    def evacuate(self):
+        for bomb_id, bomb_from_radar in self.bomb_radar.items():
             # EVACUATE FACTORY
-            destination = self.bomb_state[bomb_id]["destination"]
-            if (self.my_factories[destination]) & (self.bomb_state[bomb_id]["countdown"] == 1):
-                evacuate = self.bomb_state[bomb_id]["destination"]
+            destination = bomb_from_radar["destination"]
+            if (self.my_factories[destination]) & (bomb_from_radar["countdown"] == 1):
+                evacuate = destination
                 already_inc = f"INC {evacuate}" in self.action_list
                 troops = self.troops_vector[evacuate]
                 prod = max(self.state.factories[evacuate, PROD] + already_inc, 3)
@@ -261,6 +264,7 @@ class Player:
                 refugee = np.argsort(self.state.distance_matrix[evacuate, :])
                 for fid in refugee:
                     if self.my_factories[fid] & (fid != evacuate):
+                        self.action_list.append(f"MSG EVACUATE {evacuate} {fid} {troops + prod}")
                         self.action_list.append(f"MOVE {evacuate} {fid} {troops + prod}")
                         break
 
@@ -274,7 +278,10 @@ class Player:
         return ordered_targets, max_required_target
 
     def select_move(self):
-        #print(self.troops_required_matrix, file=sys.stderr)
+        bomb_destinations = defaultdict(list)
+        for bomb in self.bomb_radar.values():
+            bomb_destinations[bomb["destination"]].append(bomb["countdown"])
+
         ordered_targets, max_required_target = self._prioritize_target()
 
         for target_id in ordered_targets:
@@ -292,19 +299,22 @@ class Player:
                     #print(f"Committed: {committed}", file=sys.stderr)
                     move_list = self.state.path_tree[(source_id, target_id)]
                     first_target = move_list[0][1]
-                    required_from_source = 0
-                    #print(f"Source {source_id}, path {move_list}", file=sys.stderr)
-                    for isource, itarget in move_list:
-                        #print(f"{isource} {itarget} {self.troops_required_matrix[isource, itarget]}", file=sys.stderr)
-                        required_from_source += self.troops_required_matrix[source_id, itarget]
-                    n_cyborgs = int(min(required_from_source, self.troops_reserve_vector[source_id]))
-                    #print(f"Required {required_from_source}, n_cyborgs {n_cyborgs}", file=sys.stderr)
-                    self.action_list.append(f"MOVE {source_id} {first_target} {n_cyborgs}")
-                    committed += n_cyborgs
-                    self._update_from_move(source_id, first_target, n_cyborgs)
-                    max_troops_required = np.max(self.troops_required_matrix[:, target_id], axis=0)
-                    if (committed >= required_from_source) | (committed > max_troops_required):
-                        break
+
+                    # Avoid sending troop to a bombed factory
+                    if self.state.distance_matrix[source_id, first_target] not in bomb_destinations[first_target]:
+                        required_from_source = 0
+                        #print(f"Source {source_id}, path {move_list}", file=sys.stderr)
+                        for isource, itarget in move_list:
+                            #print(f"{isource} {itarget} {self.troops_required_matrix[isource, itarget]}", file=sys.stderr)
+                            required_from_source += self.troops_required_matrix[source_id, itarget]
+                        n_cyborgs = int(min(required_from_source, self.troops_reserve_vector[source_id]))
+                        #print(f"Required {required_from_source}, n_cyborgs {n_cyborgs}", file=sys.stderr)
+                        self.action_list.append(f"MOVE {source_id} {first_target} {n_cyborgs}")
+                        committed += n_cyborgs
+                        self._update_from_move(source_id, first_target, n_cyborgs)
+                        max_troops_required = np.max(self.troops_required_matrix[:, target_id], axis=0)
+                        if (committed >= required_from_source) | (committed > max_troops_required):
+                            break
 
     def select_increments(self):
         if sum(self.troops_reserve_vector) < 10:
@@ -383,6 +393,9 @@ class Player:
         self._compute_troops_required()
         self._compute_troops_reserve()
 
+        self._refresh_bomb_radar()
+        self._predict_enemy_bombs_destination()
+
     def _update_from_move(self, source_id: int, target_id: int, n_cyborgs: int):
         self.troops_reserve_vector[source_id] -= n_cyborgs
         self.troops_vector[source_id] -= n_cyborgs
@@ -402,7 +415,7 @@ class Player:
         if self.bomb_reserve > 0:
             self.select_bomb_target()
         self.select_move()
-        self.predict_bomb()
+        self.evacuate()
         if len(self.action_list) == 0:
             self.action_list.append("WAIT")
 

@@ -8,22 +8,27 @@ from ghost_cell.scenario_generator import ScenarioGenerator
 class MyTestCase(unittest.TestCase):
 
     def create_square_state(self, d, player, troops, prod, blocked):
-        square_state = GameState()
-        square_state.factory_count = 4
-        square_state.factories = np.zeros((square_state.factory_count, 6), dtype=int)
-        square_state.factories[:, ID] = [0, 1, 2, 3]
-        square_state.factories[:, PLAYER] = player
-        square_state.factories[:, TROOPS] = troops
-        square_state.factories[:, PROD] = prod
-        square_state.factories[:, BLOCKED] = blocked
-        square_state.distance_matrix = np.array([[0, d, d, int(d * np.sqrt(2))],
+        state = GameState()
+        state.factory_count = 4
+        state.factories = np.zeros((state.factory_count, 6), dtype=int)
+        state.factories[:, ID] = [0, 1, 2, 3]
+        state.factories[:, PLAYER] = player
+        state.factories[:, TROOPS] = troops
+        state.factories[:, PROD] = prod
+        state.factories[:, BLOCKED] = blocked
+        state.distance_matrix = np.array([[0, d, d, int(d * np.sqrt(2))],
                                                  [d, 0, int(d * np.sqrt(2)), d],
                                                  [d, int(d * np.sqrt(2)), 0, d],
                                                  [int(d * np.sqrt(2)), d, d, 0]])
-        square_state.max_distance = int(d * np.sqrt(2))
-        square_state.troops = np.zeros((square_state.factory_count, square_state.max_distance + 1, 2), dtype=int)
-        square_state.bombs = {0: {"id": 0, "player":-1, "source": 3, "destination": -1, "countdown": -1}}
-        return square_state
+        state.max_distance = int(d * np.sqrt(2))
+        state.troops = np.zeros((state.factory_count, state.max_distance + 1, 2), dtype=int)
+        state.bombs = {0: {"id": 0, "player":-1, "source": 3, "destination": -1, "countdown": -1}}
+        state.min_distance_matrix = np.zeros((state.factory_count, state.factory_count), dtype=int)
+        state.step_matrix = np.zeros((state.factory_count, state.factory_count), dtype=int)
+        state.path_tree = dict()
+        for source in range(state.factory_count):
+            dijkstra(state.distance_matrix, source, state.min_distance_matrix, state.step_matrix, state.path_tree)
+        return state
 
     def create_duel(self, d, player, troops, prod, blocked):
         square_state = GameState()
@@ -38,6 +43,7 @@ class MyTestCase(unittest.TestCase):
                                                  [d, 0]])
         square_state.max_distance = int(d)
         square_state.troops = np.zeros((square_state.factory_count, square_state.max_distance + 1, 2), dtype=int)
+        
         return square_state
 
     def create_hard_choice_1(self):
@@ -55,6 +61,12 @@ class MyTestCase(unittest.TestCase):
                                                  [5, 2, 2, 0]])
         state.max_distance = 5
         state.troops = np.zeros((state.factory_count, state.max_distance + 1, 2), dtype=int)
+        state.min_distance_matrix = np.zeros((state.factory_count, state.factory_count), dtype=int)
+        state.step_matrix = np.zeros((state.factory_count, state.factory_count), dtype=int)
+        state.bombs = dict()
+        state.path_tree = dict()
+        for source in range(state.factory_count):
+            dijkstra(state.distance_matrix, source, state.min_distance_matrix, state.step_matrix, state.path_tree)
         return state
 
     def create_hard_choice_2(self):
@@ -74,6 +86,12 @@ class MyTestCase(unittest.TestCase):
                                           [1, 4, 4, 2, 2, 0]])
         state.max_distance = 6
         state.troops = np.zeros((state.factory_count, state.max_distance + 1, 2), dtype=int)
+        state.min_distance_matrix = np.zeros((state.factory_count, state.factory_count), dtype=int)
+        state.step_matrix = np.zeros((state.factory_count, state.factory_count), dtype=int)
+        state.bombs = dict()
+        state.path_tree = dict()
+        for source in range(state.factory_count):
+            dijkstra(state.distance_matrix, source, state.min_distance_matrix, state.step_matrix, state.path_tree)
         return state
 
     def create_complex_scenario(self):
@@ -159,6 +177,13 @@ class MyTestCase(unittest.TestCase):
         self.assertSequenceEqual(player.action_list, ["WAIT"])
         #print(player.troops_required, "\n")
         #print(player.move_value_matrix)
+
+    def test_bomb_radar(self):
+        state = self.create_square_state(d=6, player=[1, 0, 0, -1], troops=[10, 5, 5, 10], prod=[1, 0, 0, 1], blocked=0)
+        player = Player(player_id=1, moving_troop_dist_th=100, moving_troop_discount=0.9, stationing_troop_dist_th=100,
+                        stationing_troop_discount=0.7)
+        player._update_from_state(game_state=state)
+        self.assertEqual(player.bomb_radar[0]["destination"], 0)
 
     def test_double_attack(self):
         state = self.create_square_state(d=3, player=[1, 1, 1, -1], troops=[1, 16, 16, 10], prod=[1, 0, 0, 1], blocked=0)
