@@ -94,9 +94,10 @@ class GameState:
         self.troops[:, :, :] = 0
         self.bombs = dict()
 
+
 class Player:
 
-    def __init__(self, player_id: int,  moving_troop_dist_th: int, moving_troop_discount: float,
+    def __init__(self, player_id: int, moving_troop_dist_th: int, moving_troop_discount: float,
                  stationing_troop_dist_th: int, stationing_troop_discount: float, factory_value_penalty=0.9):
         self.moving_troop_dist_th = moving_troop_dist_th
         self.moving_troop_discount = moving_troop_discount
@@ -119,7 +120,7 @@ class Player:
 
     def _stationing_troops_cost(self, factory_id: int):
         enemy_factories_nearby = (self.state.factories[:, PLAYER] == -self.player_id) & \
-                                 (self.state.factories[:, ID] != factory_id) &\
+                                 (self.state.factories[:, ID] != factory_id) & \
                                  (self.state.distance_matrix[factory_id, :] <= self.stationing_troop_dist_th)
         factory_discount = [self.stationing_troop_discount ** max(d, 0)
                             for d in self.state.distance_matrix[factory_id, enemy_factories_nearby]]
@@ -134,13 +135,13 @@ class Player:
             factory_cost, troop_cost = self._stationing_troops_cost(factory_id), self._moving_troops_cost(factory_id)
             troops = self.state.factories[factory_id, TROOPS]
             prod = self.state.factories[factory_id, PROD]
-            #blocked = self.state.factories[factory_id, BLOCKED]
+            # blocked = self.state.factories[factory_id, BLOCKED]
             available_troops = troops - factory_cost - max(troop_cost, 0)
             return available_troops * (available_troops > 0)
 
     def _compute_distance_penalty_matrix(self):
         self.distance_penalty_matrix = np.power(np.array(self.moving_troop_discount),
-                                                np.maximum(self.state.distance_matrix-1, 0))
+                                                np.maximum(self.state.distance_matrix - 1, 0))
 
     def _compute_prod_penalty_matrix(self):
         prod_vec = self.state.factories[:, PROD] * (self.state.factories[:, BLOCKED] == 0) * self.enemy_factories
@@ -163,9 +164,9 @@ class Player:
             [self._available_troops_factory(factory_id) for factory_id in self.state.factories[:, ID]]]).T
         troops_reserve = np.floor(abs(troops_reserve) * (troops_reserve > 0))
 
-        #self.total_capacity = sum(troops_reserve)
+        # self.total_capacity = sum(troops_reserve)
         self.troops_reserve_vector = troops_reserve
-        #self.troops_reserve_matrix = np.dot(troops_reserve, self.matrix_converter)
+        # self.troops_reserve_matrix = np.dot(troops_reserve, self.matrix_converter)
 
     def _required_troops_factory(self, factory_id):
         player = self.state.factories[factory_id, PLAYER]
@@ -199,21 +200,21 @@ class Player:
                 sum_distance_enemy += self.state.distance_matrix[factory_id, fid]
                 k_enemy += 1
         if (sum_distance_ally > 0) & (sum_distance_enemy > 0):
-            ratio = (sum_distance_enemy/sum_distance_ally)
+            ratio = (sum_distance_enemy / sum_distance_ally)
         else:
             ratio = 1
         return (prod + 0.1) * ratio
 
     def _compute_value(self):
         value = np.array([self._factory_value(fid, 3) for fid in self.state.factories[:, ID]])
-        #print(value, file=sys.stderr)
+        # print(value, file=sys.stderr)
         return value
 
     def predict_bomb(self):
         fids = self.state.factories[self.my_factories, ID]
         troops = self.state.factories[self.my_factories, TROOPS]
         prod = self.state.factories[self.my_factories, PROD]
-        targets = [(fid, tr, pr) for fid,tr,pr in zip(fids, troops, prod)]
+        targets = [(fid, tr, pr) for fid, tr, pr in zip(fids, troops, prod)]
         targets = list(sorted(targets, key=lambda x: (-x[1], -x[2])))
 
         bomb_keys = list(self.bomb_state.keys())
@@ -245,47 +246,60 @@ class Player:
             # EVACUATE FACTORY
             if (bomb['player'] == -self.player_id) & (self.bomb_state[bomb_id]["countdown"] == 1):
                 evacuate = self.bomb_state[bomb_id]["destination"]
-                #already_inc = f"INC {evacuate}" in self.action_list
+                already_inc = f"INC {evacuate}" in self.action_list
                 troops = self.troops_vector[evacuate]
-                prod = self.state.factories[evacuate, PROD] #+ already_inc
-                #increments = round(min(troops / 10, 3-prod))
-                #print(f"{increments} {troops} {prod}", file=sys.stderr)
-                #while increments > 0:
-                #    self.action_list.append(f"INC {evacuate}")
-                #    troops -= 10
-                #    increments -= 1
+                prod = self.state.factories[evacuate, PROD] + already_inc
+                increments = round(min(troops / 10, 3 - prod))
+                # print(f"{increments} {troops} {prod}", file=sys.stderr)
+                while increments > 0:
+                    self.action_list.append(f"INC {evacuate}")
+                    troops -= 10
+                    increments -= 1
                 refugee = np.argsort(self.state.distance_matrix[evacuate, :])
                 for fid in refugee:
                     if self.my_factories[fid] & (fid != evacuate):
                         self.action_list.append(f"MOVE {evacuate} {fid} {troops + prod}")
                         break
 
-    def select_move(self):
+    def _prioritize_target(self):
         target_value = self._compute_value()
-        #print(f"{[(fid, target_value[fid]) for fid in self.state.factories[:, ID]]}", file=sys.stderr)
+        total_troops_ratio = self.total_enemy_troops / self.total_ally_troops
         max_required_target = np.max(self.troops_required_matrix, axis=0)
-        ordered_targets = np.array(list(reversed(np.argsort(target_value))))
-        ordered_targets = ordered_targets[(target_value[ordered_targets] > 1) &
-                                          (max_required_target[ordered_targets] > 0)]
+        ordered_targets = np.argsort(-target_value)
+        ordered_targets = ordered_targets[(target_value[ordered_targets] > total_troops_ratio) &
+                                          (max_required_target[ordered_targets] >= 1)]
+        return ordered_targets, max_required_target
+
+    def select_move(self):
+        #print(self.troops_required_matrix, file=sys.stderr)
+        ordered_targets, max_required_target = self._prioritize_target()
 
         for target_id in ordered_targets:
             max_troops_required = max_required_target[target_id]
             if max_troops_required <= sum(self.troops_reserve_vector):
-                ordered_sources = np.array(list(reversed(np.argsort(self.state.distance_matrix[:, target_id]))))
+                ordered_sources = np.argsort(self.state.min_distance_matrix[:, target_id])
                 to_consider = (self.my_factories[ordered_sources]) & (ordered_sources != target_id) & \
-                              (self.troops_reserve_vector[ordered_sources].reshape((-1,)) > 0)
+                              (self.troops_reserve_vector[ordered_sources].reshape((-1,)) >= 1)
                 ordered_sources = ordered_sources[to_consider]
                 committed = 0
+                #print(f"Target: {target_id} {max_troops_required}", file=sys.stderr)
+                #print(f"Sources: {ordered_sources}", file=sys.stderr)
+
                 for source_id in ordered_sources:
+                    #print(f"Committed: {committed}", file=sys.stderr)
                     move_list = self.state.path_tree[(source_id, target_id)]
                     first_target = move_list[0][1]
                     required_from_source = 0
+                    #print(f"Source {source_id}, path {move_list}", file=sys.stderr)
                     for isource, itarget in move_list:
-                        required_from_source += self.troops_required_matrix[isource, itarget]
+                        #print(f"{isource} {itarget} {self.troops_required_matrix[isource, itarget]}", file=sys.stderr)
+                        required_from_source += self.troops_required_matrix[source_id, itarget]
                     n_cyborgs = int(min(required_from_source, self.troops_reserve_vector[source_id]))
+                    #print(f"Required {required_from_source}, n_cyborgs {n_cyborgs}", file=sys.stderr)
                     self.action_list.append(f"MOVE {source_id} {first_target} {n_cyborgs}")
                     committed += n_cyborgs
                     self._update_from_move(source_id, first_target, n_cyborgs)
+                    max_troops_required = np.max(self.troops_required_matrix[:, target_id], axis=0)
                     if (committed >= required_from_source) | (committed > max_troops_required):
                         break
 
@@ -294,9 +308,9 @@ class Player:
             return
         for source_id, available in enumerate(self.troops_reserve_vector):
             if (available > 10) & (self.state.factories[source_id, PROD] < 3):
-                #print(f" FACTORY {self.state.factories}", file=sys.stderr)
-                #print(f" AVAILABLE {self.troops_reserve_matrix}", file=sys.stderr)
-                #print(f" INC FACTORY {source_id} {available} {self.state.factories[source_id, TROOPS]}", file=sys.stderr)
+                # print(f" FACTORY {self.state.factories}", file=sys.stderr)
+                # print(f" AVAILABLE {self.troops_reserve_matrix}", file=sys.stderr)
+                # print(f" INC FACTORY {source_id} {available} {self.state.factories[source_id, TROOPS]}", file=sys.stderr)
                 self.action_list.append(f"INC {source_id}")
                 self._update_after_increment(source_id)
 
@@ -310,6 +324,10 @@ class Player:
         self.total_prod = sum(game_state.factories[self.my_factories, PROD])
 
         self.troops_vector = self.state.factories[:, TROOPS]
+        self.total_ally_troops = sum(self.state.factories[self.my_factories, TROOPS])
+        self.total_ally_troops += np.sum(self.state.troops[:, :, PLAYER_MAP[self.player_id]])
+        self.total_enemy_troops = sum(self.state.factories[self.enemy_factories, TROOPS])
+        self.total_enemy_troops += np.sum(self.state.troops[:, :, PLAYER_MAP[-self.player_id]])
 
         self._compute_distance_penalty_matrix()
         self._compute_prod_penalty_matrix()
