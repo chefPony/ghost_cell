@@ -248,7 +248,7 @@ class Player:
                 evacuate = self.bomb_state[bomb_id]["destination"]
                 already_inc = f"INC {evacuate}" in self.action_list
                 troops = self.troops_vector[evacuate]
-                prod = self.state.factories[evacuate, PROD] + already_inc
+                prod = max(self.state.factories[evacuate, PROD] + already_inc, 3)
                 increments = round(min(troops / 10, 3 - prod))
                 # print(f"{increments} {troops} {prod}", file=sys.stderr)
                 while increments > 0:
